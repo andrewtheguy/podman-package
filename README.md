@@ -89,3 +89,21 @@ output/
   - Ubuntu package repositories
   - Podman source tarballs on GitHub
   - Go toolchain tarballs on `go.dev`
+
+## Runtime Requirement for Newer `pasta` Features
+
+This is a feature-level requirement, not a base Podman package dependency.
+
+On Ubuntu 24.04 (`noble`), the archive `passt` build is older and does not provide newer `pasta` options such as `--map-host-loopback` with an address argument. If you need those newer features, install a newer `passt` from Ubuntu `resolute`:
+
+- [`passt` in Ubuntu resolute](https://packages.ubuntu.com/resolute/passt)
+
+Example feature check (expected `404` means host loopback was reached through `pasta` and the HTTP server responded):
+
+```bash
+podman run --rm --network 'pasta:--map-host-loopback,169.254.0.1' \
+  docker.io/curlimages/curl:latest \
+  curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://169.254.0.1
+```
+
+This repository currently builds Podman packages only; it does not build or backport `passt` automatically.

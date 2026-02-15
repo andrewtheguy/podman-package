@@ -98,12 +98,28 @@ On Ubuntu 24.04 (`noble`), the archive `passt` build is older and does not provi
 
 - [`passt` in Ubuntu resolute](https://packages.ubuntu.com/resolute/passt)
 
-Example feature check (expected `404` means host loopback was reached through `pasta` and the HTTP server responded):
+Example feature check (requires a host service bound to `127.0.0.1:<port>`):
+
+1. Start a host-local test server (terminal A):
+
+```bash
+python3 -m http.server --bind 127.0.0.1 18080
+```
+
+Expected behavior for this server:
+- Requesting `http://127.0.0.1:18080/` returns `200`.
+- Requesting a missing path (for example `/does-not-exist`) returns `404`.
+
+2. From another terminal, run a container over `pasta` with loopback mapping (terminal B):
 
 ```bash
 podman run --rm --network 'pasta:--map-host-loopback,169.254.0.1' \
   docker.io/curlimages/curl:latest \
-  curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://169.254.0.1
+  curl -sS -o /dev/null -w '%{http_code}\n' --max-time 5 http://169.254.0.1:18080/
 ```
+
+Expected result for the Python server example above: `200`.
+If you intentionally curl a missing path, `404` is also a valid connectivity signal.
+A timeout or `000` means connectivity failed.
 
 This repository currently builds Podman packages only; it does not build or backport `passt` automatically.

@@ -9,6 +9,12 @@ This repository has two zero-argument entrypoints:
 ./scripts/build-podman-deb-debian13.sh
 ```
 
+## Script Layout
+
+- Host/orchestrator scripts remain under `scripts/`.
+- In-container build scripts are under `scripts/container/`.
+- Shared helpers remain under `scripts/lib/`.
+
 ## Targets
 
 - Ubuntu 24.04 codename `noble` (multi-arch: `amd64`, `arm64`)

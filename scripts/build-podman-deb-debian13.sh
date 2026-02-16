@@ -61,7 +61,7 @@ run_build_for_arch() {
     -v "${REPO_ROOT}:/workspace:ro" \
     -v "${OUTPUT_ROOT}:/out" \
     "${image_tag}" \
-    /workspace/scripts/in-container-build-debian13.sh
+    /workspace/scripts/container/in-container-build-debian13.sh
 }
 
 write_manifest() {

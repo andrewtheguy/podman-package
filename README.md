@@ -1,85 +1,114 @@
-# Podman Noble Builder
+# Podman Package Builders
 
-Build Ubuntu 24.04 (`noble`) Podman `.deb` packages inside Docker for isolation.
+Build Podman `.deb` packages in Docker for isolated, deterministic builds.
 
-This project has one entrypoint and intentionally accepts no arguments:
+This repository has two zero-argument entrypoints:
 
 ```bash
 ./scripts/build-podman-deb.sh
+./scripts/build-podman-deb-debian13.sh
 ```
 
-## What It Does
+## Targets
 
-- Builds in Docker containers only (no host toolchain required beyond Docker/Buildx).
-- Targets both `amd64` and `arm64`.
-- Uses Ubuntu noble `libpod` Debian packaging as the baseline.
-- Replaces Ubuntu source content with a pinned upstream Podman release from `packaging/versions.env`.
-- Carries Ubuntu's `cni/87-podman-bridge.conflist` into upstream source for Debian install compatibility.
-- Reads the required Go version from the pinned Podman tag's upstream `go.mod`.
-- Downloads and installs that exact Go toolchain in-container from `go.dev`.
-- Sets `DEB_BUILD_OPTIONS=nocheck` in-container for deterministic package builds under isolation.
-- Normalizes Debian install metadata (`debian/podman-docker.install`, `debian/not-installed`) for upstream/Ubuntu drift.
-- Overrides `dh_golang` in patched `debian/rules` because the workflow uses `/usr/local/go` (not distro-owned Go files).
-- Applies only repository-managed patch files from `packaging/patches/`.
-- Exports artifacts to `output/<tag>/<arch>/`.
-- Writes checksums and a build manifest at `output/<tag>/manifest.txt`.
+- Ubuntu 24.04 codename `noble` (multi-arch: `amd64`, `arm64`)
+- Debian 13 codename `trixie` (multi-arch: `amd64`, `arm64`)
+
+## Output Contract
+
+All artifacts are written to:
+
+`output/<distro>/<version>/<architecture>/`
+
+Where:
+- `<distro>` is the codename: `noble` or `trixie`
+- `<version>` is UTC date in `YYYYMMDD` format from `date -u +%Y%m%d`
+- `<architecture>` is `amd64` or `arm64`
+
+Example UTC date version:
+- `20260216` (Monday, February 16, 2026 UTC)
+
+Same-day rerun behavior:
+- Each script deletes its own `output/<distro>/<YYYYMMDD>/` directory before rebuilding.
+- This intentionally replaces same-day artifacts for that distro.
+
+## What The Build Does
+
+- Runs entirely in Docker containers (host only needs Docker + Buildx).
+- Uses pinned `PODMAN_TAG` from `packaging/versions.env`.
+- Derives Go toolchain version from upstream Podman `go.mod`.
+- Injects distro packaging (`debian/`) into upstream Podman source.
+- Applies repository-managed patch series only (no runtime fallback).
+- Forces deterministic container build flags:
+  - `DEB_BUILD_OPTIONS=nocheck`
+  - `GOTELEMETRY=off`
+- Writes `SHA256SUMS` in each arch directory.
+- Writes `manifest.txt` at `output/<distro>/<YYYYMMDD>/manifest.txt`.
 
 ## Deterministic Patch Policy
 
-There is no runtime patch fallback logic.
+No runtime fallback or auto-detection is used.
 
-- The build always replaces `debian/patches/` with files from this repository:
-  - `packaging/patches/series`
-  - `packaging/patches/*.patch`
-- The `series` file controls exactly which patches are applied.
-- The default `series` file is empty, which means patch application is skipped.
+Ubuntu (`noble`) patch source:
+- `packaging/patches/series`
+- `packaging/patches/*.patch`
 
-## Add Custom Patches
+Debian (`trixie`) patch source:
+- `packaging/patches-debian13/series`
+- `packaging/patches-debian13/*.patch`
 
-1. Place your patch files in `packaging/patches/`.
-2. Add patch filenames to `packaging/patches/series` in apply order.
-3. Re-run `./scripts/build-podman-deb.sh`.
+Notes:
+- Each workflow uses its own `series` file exactly as-is.
+- Empty `series` means patch application is skipped.
 
-Example `packaging/patches/series`:
+## Version Pinning
 
-```text
-fix-build-tag-regression.patch
-update-criu-compat.patch
-```
-
-## Reproducible Version Pins
-
-Non-Ubuntu-noble upstream inputs are pinned in:
-
-`packaging/versions.env`
+Pinned upstream input config:
+- `packaging/versions.env`
 
 ```bash
 PODMAN_TAG=v5.8.0
 ```
 
 Notes:
-- The zero-arg orchestrator reads this file directly.
-- `PODMAN_TAG` controls the upstream source tarball used for both arches.
-- The Go toolchain version is derived from the pinned Podman tag's `go.mod`.
+- Both orchestrators source this file directly.
+- `PODMAN_TAG` controls upstream source tarball selection.
+- Go is not separately pinned; it is read from upstream `go.mod` for the pinned tag.
 
-## Output Layout
+## Output Layout Example
 
 ```text
 output/
-  vX.Y.Z/
-    manifest.txt
-    amd64/
-      *.deb
-      *.changes
-      *.buildinfo
-      build.log
-      SHA256SUMS
-    arm64/
-      *.deb
-      *.changes
-      *.buildinfo
-      build.log
-      SHA256SUMS
+  noble/
+    20260216/
+      manifest.txt
+      amd64/
+        *.deb
+        *.changes
+        *.buildinfo
+        build.log
+        SHA256SUMS
+      arm64/
+        *.deb
+        *.changes
+        *.buildinfo
+        build.log
+        SHA256SUMS
+  trixie/
+    20260216/
+      manifest.txt
+      amd64/
+        *.deb
+        *.changes
+        *.buildinfo
+        build.log
+        SHA256SUMS
+      arm64/
+        *.deb
+        *.changes
+        *.buildinfo
+        build.log
+        SHA256SUMS
 ```
 
 ## Prerequisites
@@ -87,6 +116,7 @@ output/
 - Docker with Buildx support.
 - Network access to:
   - Ubuntu package repositories
+  - Debian package repositories
   - Podman source tarballs on GitHub
   - Go toolchain tarballs on `go.dev`
 

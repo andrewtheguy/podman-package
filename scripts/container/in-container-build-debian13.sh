@@ -44,6 +44,7 @@ install_prereqs() {
     devscripts \
     dpkg-dev \
     equivs \
+    jq \
     patch \
     quilt \
     tar \
@@ -83,6 +84,16 @@ prepare_sources() {
   cp -a "${PATCH_SOURCE_DIR}/." "${UPSTREAM_SRC_DIR}/debian/patches/"
 
   GO_TOOLCHAIN_VERSION="$(awk '/^go[[:space:]]+[0-9]+\.[0-9]+(\.[0-9]+)?$/ {print $2; exit}' "${UPSTREAM_SRC_DIR}/go.mod")"
+  if [[ -z "${GO_TOOLCHAIN_VERSION}" ]]; then
+    GO_TOOLCHAIN_VERSION="$(awk '
+      /^toolchain[[:space:]]+go[0-9]+\.[0-9]+(\.[0-9]+)?$/ {
+        version=$2
+        sub(/^go/, "", version)
+        print version
+        exit
+      }
+    ' "${UPSTREAM_SRC_DIR}/go.mod")"
+  fi
   [[ -n "${GO_TOOLCHAIN_VERSION}" ]] || die "unable to read required Go version from ${UPSTREAM_SRC_DIR}/go.mod"
 }
 
@@ -95,9 +106,23 @@ install_go_toolchain() {
 
   local go_tgz="/tmp/go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
   local go_url="https://go.dev/dl/go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
+  local go_filename="go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
+  local expected_sha256
+
+  expected_sha256="$(
+    curl -fsSL -L "https://go.dev/dl/?mode=json&include=all" | jq -r \
+      --arg go_version "go${GO_TOOLCHAIN_VERSION}" \
+      --arg go_filename "${go_filename}" '
+        map(select(.version == $go_version)) | .[0].files[]? | select(.filename == $go_filename) | .sha256
+      ' | head -n 1
+  )"
+  [[ "${expected_sha256}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "unable to retrieve valid Go checksum for ${go_filename} from go.dev JSON API"
 
   log "Installing Go toolchain ${GO_TOOLCHAIN_VERSION} for ${GO_TOOLCHAIN_ARCH} from ${go_url}"
   curl -fsSL -o "${go_tgz}" -L "${go_url}"
+  echo "${expected_sha256}  ${go_tgz}" | sha256sum -c - >/dev/null || \
+    die "Go toolchain checksum verification failed for ${go_tgz}"
   rm -rf /usr/local/go
   tar -C /usr/local -xzf "${go_tgz}"
 

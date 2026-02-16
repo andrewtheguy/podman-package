@@ -25,6 +25,7 @@ FROM base AS build
 ARG DISTRO=trixie
 ARG BUILD_VERSION
 ARG PODMAN_TAG
+ARG UPSTREAM_SHA256
 ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
@@ -35,6 +36,7 @@ RUN chmod +x /workspace/scripts/container/in-container-build-debian13.sh && \
     DISTRO="${DISTRO}" \
     BUILD_VERSION="${BUILD_VERSION}" \
     PODMAN_TAG="${PODMAN_TAG}" \
+    UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
     TARGET_ARCH="${TARGET_ARCH}" \
     /workspace/scripts/container/in-container-build-debian13.sh
 

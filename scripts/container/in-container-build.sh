@@ -11,6 +11,7 @@ fi
 : "${PODMAN_TAG:?PODMAN_TAG is required}"
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
+: "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=noble}"
 
 PATCH_SOURCE_DIR="/workspace/packaging/patches"
@@ -23,6 +24,9 @@ GO_TOOLCHAIN_VERSION=""
 GO_TOOLCHAIN_ARCH=""
 
 setup_sources() {
+  [[ "${DISTRO}" =~ ^[a-z][a-z0-9-]*$ ]] || \
+    die "setup_sources: invalid DISTRO='${DISTRO}' (expected lower-case letters, digits, or hyphens) for /etc/apt/sources.list.d/ubuntu-src.list"
+
   cat > /etc/apt/sources.list.d/ubuntu-src.list <<EOF
 deb-src http://archive.ubuntu.com/ubuntu ${DISTRO} main universe multiverse restricted
 deb-src http://archive.ubuntu.com/ubuntu ${DISTRO}-updates main universe multiverse restricted
@@ -61,6 +65,15 @@ prepare_sources() {
   local upstream_url="https://github.com/containers/podman/archive/refs/tags/${PODMAN_TAG}.tar.gz"
   log "Downloading upstream Podman source: ${upstream_url}"
   curl -fsSL -o "${upstream_tarball}" -L "${upstream_url}"
+
+  local expected_sha256="${UPSTREAM_SHA256,,}"
+  [[ "${expected_sha256}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "invalid UPSTREAM_SHA256 format: ${UPSTREAM_SHA256}"
+  local actual_sha256
+  actual_sha256="$(sha256sum "${upstream_tarball}" | awk '{print $1}')"
+  [[ "${actual_sha256}" == "${expected_sha256}" ]] || \
+    die "upstream tarball checksum mismatch for ${upstream_tarball}: expected ${expected_sha256}, got ${actual_sha256}"
+
   tar -xzf "${upstream_tarball}" -C "${WORK_ROOT}"
 
   UPSTREAM_SRC_DIR="${WORK_ROOT}/podman-${upstream_version}"
@@ -92,9 +105,23 @@ install_go_toolchain() {
 
   local go_tgz="/tmp/go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
   local go_url="https://go.dev/dl/go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
+  local go_filename="go${GO_TOOLCHAIN_VERSION}.linux-${GO_TOOLCHAIN_ARCH}.tar.gz"
+  local expected_sha256
+
+  expected_sha256="$(
+    curl -fsSL -L "https://go.dev/dl/?mode=json&include=all" | jq -r \
+      --arg go_version "go${GO_TOOLCHAIN_VERSION}" \
+      --arg go_filename "${go_filename}" '
+        map(select(.version == $go_version)) | .[0].files[]? | select(.filename == $go_filename) | .sha256
+      ' | head -n 1
+  )"
+  [[ "${expected_sha256}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "unable to retrieve valid Go checksum for ${go_filename} from go.dev JSON API"
 
   log "Installing Go toolchain ${GO_TOOLCHAIN_VERSION} for ${GO_TOOLCHAIN_ARCH} from ${go_url}"
   curl -fsSL -o "${go_tgz}" -L "${go_url}"
+  echo "${expected_sha256}  ${go_tgz}" | sha256sum -c - >/dev/null || \
+    die "Go toolchain checksum verification failed for ${go_tgz}"
   rm -rf /usr/local/go
   tar -C /usr/local -xzf "${go_tgz}"
 

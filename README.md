@@ -81,11 +81,13 @@ Pinned upstream input config:
 
 ```bash
 PODMAN_TAG=v5.8.0
+UPSTREAM_SHA256=19723cda810e087ded8903fb0f33918b10d81f7fd1d8964880c41ec30d1daa70
 ```
 
 Notes:
 - Both orchestrators source this file directly.
 - `PODMAN_TAG` controls upstream source tarball selection.
+- `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
 - Go is not separately pinned; it is read from upstream `go.mod` for the pinned tag.
 
 ## Output Layout Example

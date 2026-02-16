@@ -15,7 +15,7 @@ USAGE
 fi
 
 DISTRO="trixie"
-ARCHES=("amd64" "arm64")
+ARCHES=("arm64" "amd64")
 OUTPUT_ROOT="${REPO_ROOT}/output"
 BUILD_VERSION="$(date -u +%Y%m%d)"
 BUILDER_IMAGE_PREFIX="podman-debian13-builder"
@@ -111,18 +111,34 @@ main() {
   local distro_version_dir="${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
   rm -rf "${distro_version_dir}"
 
-  build_builder_image "amd64"
   local resolved_tag="${PINNED_PODMAN_TAG}"
   log "Using pinned Podman tag from ${VERSION_CONFIG}: ${resolved_tag}"
+  log "Per-arch runs are independent; completed arch artifacts are exported immediately."
 
+  local failed_arches=()
   for arch in "${ARCHES[@]}"; do
-    if [[ "${arch}" != "amd64" ]]; then
-      build_builder_image "${arch}"
+    log "Starting full workflow for ${arch} (image build + containerized package build)"
+
+    if ! build_builder_image "${arch}"; then
+      log "ERROR: builder image failed for ${arch}"
+      failed_arches+=( "${arch}:image" )
+      continue
     fi
-    run_build_for_arch "${arch}" "${resolved_tag}"
+
+    if run_build_for_arch "${arch}" "${resolved_tag}"; then
+      log "Completed ${arch}; artifacts exported to ${distro_version_dir}/${arch}"
+    else
+      log "ERROR: build failed for ${arch}"
+      failed_arches+=( "${arch}:build" )
+    fi
   done
 
   write_manifest "${resolved_tag}"
+
+  if [[ "${#failed_arches[@]}" -gt 0 ]]; then
+    die "one or more architecture runs failed: ${failed_arches[*]}"
+  fi
+
   log "Done. Debian 13 artifacts are in ${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
 }
 

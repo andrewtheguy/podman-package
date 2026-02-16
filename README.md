@@ -38,6 +38,12 @@ Same-day rerun behavior:
 - Each script deletes its own `output/<distro>/<YYYYMMDD>/` directory before rebuilding.
 - This intentionally replaces same-day artifacts for that distro.
 
+Per-architecture run behavior:
+- Architecture workflows run sequentially in order: arm64, then amd64.
+- Each architecture run is independent.
+- Artifacts for an architecture are exported as soon as that architecture finishes.
+- If one architecture fails, the script still attempts the remaining architectures, then exits non-zero at the end.
+
 ## What The Build Does
 
 - Runs entirely in Docker containers (host only needs Docker + Buildx).

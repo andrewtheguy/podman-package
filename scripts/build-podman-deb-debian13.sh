@@ -113,7 +113,7 @@ main() {
 
   local resolved_tag="${PINNED_PODMAN_TAG}"
   log "Using pinned Podman tag from ${VERSION_CONFIG}: ${resolved_tag}"
-  log "Per-arch runs are independent; completed arch artifacts are exported immediately."
+  log "Per-arch runs are sequential; completed arch artifacts are exported immediately."
 
   local failed_arches=()
   for arch in "${ARCHES[@]}"; do
@@ -122,7 +122,7 @@ main() {
     if ! build_builder_image "${arch}"; then
       log "ERROR: builder image failed for ${arch}"
       failed_arches+=( "${arch}:image" )
-      continue
+      break
     fi
 
     if run_build_for_arch "${arch}" "${resolved_tag}"; then
@@ -130,6 +130,7 @@ main() {
     else
       log "ERROR: build failed for ${arch}"
       failed_arches+=( "${arch}:build" )
+      break
     fi
   done
 

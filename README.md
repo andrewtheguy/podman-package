@@ -40,9 +40,9 @@ Same-day rerun behavior:
 
 Per-architecture run behavior:
 - Architecture workflows run sequentially in order: arm64, then amd64.
-- Each architecture run is independent.
+- Each architecture run is isolated.
 - Artifacts for an architecture are exported as soon as that architecture finishes.
-- If one architecture fails, the script still attempts the remaining architectures, then exits non-zero at the end.
+- If one architecture fails, the script stops before attempting remaining architectures and exits non-zero at the end.
 
 ## What The Build Does
 

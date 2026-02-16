@@ -31,7 +31,7 @@ build_builder_image() {
     --load \
     --platform "linux/${arch}" \
     --tag "${image_tag}" \
-    --file "${REPO_ROOT}/docker/Dockerfile.debian13-builder" \
+    --file "docker/Dockerfile.debian13-builder" \
     "${REPO_ROOT}"
 }
 

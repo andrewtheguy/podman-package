@@ -31,7 +31,7 @@ build_builder_image() {
     --load \
     --platform "linux/${arch}" \
     --tag "${image_tag}" \
-    --file "${REPO_ROOT}/docker/Dockerfile.noble-builder" \
+    --file "docker/Dockerfile.noble-builder" \
     "${REPO_ROOT}"
 }
 

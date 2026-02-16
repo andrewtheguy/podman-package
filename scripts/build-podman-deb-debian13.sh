@@ -20,6 +20,7 @@ OUTPUT_ROOT="${REPO_ROOT}/output"
 BUILD_VERSION="$(date -u +%Y%m%d)"
 BUILDER_IMAGE_PREFIX="podman-debian13-builder"
 VERSION_CONFIG="${REPO_ROOT}/packaging/versions.env"
+PATCH_SOURCE_DIR="${REPO_ROOT}/packaging/patches-debian13"
 PINNED_PODMAN_TAG=""
 
 build_builder_image() {
@@ -44,6 +45,11 @@ load_versions_config() {
 
   [[ "${PINNED_PODMAN_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || \
     die "invalid or missing PODMAN_TAG in ${VERSION_CONFIG}: ${PINNED_PODMAN_TAG:-<empty>}"
+}
+
+check_patch_source() {
+  [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
+  [[ -f "${PATCH_SOURCE_DIR}/series" ]] || die "missing patch series file: ${PATCH_SOURCE_DIR}/series"
 }
 
 run_build_for_arch() {
@@ -106,6 +112,7 @@ main() {
   require_cmd docker
   docker buildx version >/dev/null 2>&1 || die "docker buildx is required"
   load_versions_config
+  check_patch_source
 
   mkdir -p "${OUTPUT_ROOT}"
   local distro_version_dir="${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"

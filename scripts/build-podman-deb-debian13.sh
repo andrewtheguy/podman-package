@@ -6,19 +6,19 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 if [[ $# -ne 0 ]]; then
-  cat >&2 <<'EOF'
-Usage: ./scripts/build-podman-deb.sh
+  cat >&2 <<'USAGE'
+Usage: ./scripts/build-podman-deb-debian13.sh
 
 This script is intentionally zero-argument.
-EOF
+USAGE
   exit 2
 fi
 
-DISTRO="noble"
+DISTRO="trixie"
 ARCHES=("amd64" "arm64")
 OUTPUT_ROOT="${REPO_ROOT}/output"
 BUILD_VERSION="$(date -u +%Y%m%d)"
-BUILDER_IMAGE_PREFIX="podman-noble-builder"
+BUILDER_IMAGE_PREFIX="podman-debian13-builder"
 VERSION_CONFIG="${REPO_ROOT}/packaging/versions.env"
 PINNED_PODMAN_TAG=""
 
@@ -31,7 +31,7 @@ build_builder_image() {
     --load \
     --platform "linux/${arch}" \
     --tag "${image_tag}" \
-    --file "${REPO_ROOT}/docker/Dockerfile.noble-builder" \
+    --file "${REPO_ROOT}/docker/Dockerfile.debian13-builder" \
     "${REPO_ROOT}"
 }
 
@@ -51,7 +51,7 @@ run_build_for_arch() {
   local tag="$2"
   local image_tag="${BUILDER_IMAGE_PREFIX}:${DISTRO}-${arch}"
 
-  log "Running isolated build for ${arch} with Podman ${tag}"
+  log "Running isolated Debian 13 build for ${arch} with Podman ${tag}"
   docker run --rm \
     --platform "linux/${arch}" \
     -e DISTRO="${DISTRO}" \
@@ -61,7 +61,7 @@ run_build_for_arch() {
     -v "${REPO_ROOT}:/workspace:ro" \
     -v "${OUTPUT_ROOT}:/out" \
     "${image_tag}" \
-    /workspace/scripts/in-container-build.sh
+    /workspace/scripts/in-container-build-debian13.sh
 }
 
 write_manifest() {
@@ -111,7 +111,6 @@ main() {
   local distro_version_dir="${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
   rm -rf "${distro_version_dir}"
 
-  # Build amd64 image first and then reuse the same pinned versions for both arches.
   build_builder_image "amd64"
   local resolved_tag="${PINNED_PODMAN_TAG}"
   log "Using pinned Podman tag from ${VERSION_CONFIG}: ${resolved_tag}"
@@ -124,7 +123,7 @@ main() {
   done
 
   write_manifest "${resolved_tag}"
-  log "Done. Artifacts are in ${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
+  log "Done. Debian 13 artifacts are in ${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
 }
 
 main

@@ -44,6 +44,8 @@ run_build_for_arch() {
 
   log "Running ${pipeline_label} for ${arch} with Podman ${tag}"
   docker buildx build \
+    --pull \
+    --no-cache \
     --platform "linux/${arch}" \
     --build-arg "DISTRO=${DISTRO}" \
     --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
@@ -106,6 +108,7 @@ run_orchestrator() {
 
   local resolved_tag="${PINNED_PODMAN_TAG}"
   log "Using pinned Podman tag from ${VERSION_CONFIG}: ${resolved_tag}"
+  log "Builds run with docker buildx --pull --no-cache so apt metadata/packages refresh every run."
   log "Per-arch runs are sequential; completed arch artifacts are exported immediately."
 
   local failed_arches=()

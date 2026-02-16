@@ -47,6 +47,7 @@ Per-architecture run behavior:
 ## What The Build Does
 
 - Runs entirely in Docker containers (host only needs Docker + Buildx).
+- Uses one `docker buildx build` pipeline per architecture (no separate `--load` + `docker run` step).
 - Uses pinned `PODMAN_TAG` from `packaging/versions.env`.
 - Derives Go toolchain version from upstream Podman `go.mod`.
 - Injects distro packaging (`debian/`) into upstream Podman source.

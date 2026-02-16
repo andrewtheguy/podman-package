@@ -1,4 +1,4 @@
-FROM debian:trixie
+FROM debian:trixie AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -19,3 +19,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
+
+FROM base AS build
+
+ARG DISTRO=trixie
+ARG BUILD_VERSION
+ARG PODMAN_TAG
+ARG TARGET_ARCH
+
+COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
+COPY scripts/container/in-container-build-debian13.sh /workspace/scripts/container/in-container-build-debian13.sh
+COPY packaging/patches-debian13 /workspace/packaging/patches-debian13
+
+RUN chmod +x /workspace/scripts/container/in-container-build-debian13.sh && \
+    DISTRO="${DISTRO}" \
+    BUILD_VERSION="${BUILD_VERSION}" \
+    PODMAN_TAG="${PODMAN_TAG}" \
+    TARGET_ARCH="${TARGET_ARCH}" \
+    /workspace/scripts/container/in-container-build-debian13.sh
+
+FROM scratch AS artifact-export
+
+COPY --from=build /out/ /

@@ -18,23 +18,9 @@ DISTRO="trixie"
 ARCHES=("arm64" "amd64")
 OUTPUT_ROOT="${REPO_ROOT}/output"
 BUILD_VERSION="$(date -u +%Y%m%d)"
-BUILDER_IMAGE_PREFIX="podman-debian13-builder"
 VERSION_CONFIG="${REPO_ROOT}/packaging/versions.env"
 PATCH_SOURCE_DIR="${REPO_ROOT}/packaging/patches-debian13"
 PINNED_PODMAN_TAG=""
-
-build_builder_image() {
-  local arch="$1"
-  local image_tag="${BUILDER_IMAGE_PREFIX}:${DISTRO}-${arch}"
-
-  log "Building builder image for ${arch}: ${image_tag}"
-  docker buildx build \
-    --load \
-    --platform "linux/${arch}" \
-    --tag "${image_tag}" \
-    --file "docker/Dockerfile.debian13-builder" \
-    "${REPO_ROOT}"
-}
 
 load_versions_config() {
   [[ -f "${VERSION_CONFIG}" ]] || die "missing versions config: ${VERSION_CONFIG}"
@@ -55,19 +41,18 @@ check_patch_source() {
 run_build_for_arch() {
   local arch="$1"
   local tag="$2"
-  local image_tag="${BUILDER_IMAGE_PREFIX}:${DISTRO}-${arch}"
 
-  log "Running isolated Debian 13 build for ${arch} with Podman ${tag}"
-  docker run --rm \
+  log "Running single buildx Debian 13 pipeline for ${arch} with Podman ${tag}"
+  docker buildx build \
     --platform "linux/${arch}" \
-    -e DISTRO="${DISTRO}" \
-    -e BUILD_VERSION="${BUILD_VERSION}" \
-    -e PODMAN_TAG="${tag}" \
-    -e TARGET_ARCH="${arch}" \
-    -v "${REPO_ROOT}:/workspace:ro" \
-    -v "${OUTPUT_ROOT}:/out" \
-    "${image_tag}" \
-    /workspace/scripts/container/in-container-build-debian13.sh
+    --build-arg "DISTRO=${DISTRO}" \
+    --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+    --build-arg "PODMAN_TAG=${tag}" \
+    --build-arg "TARGET_ARCH=${arch}" \
+    --target artifact-export \
+    --output "type=local,dest=${OUTPUT_ROOT}" \
+    --file "docker/Dockerfile.debian13-builder" \
+    "${REPO_ROOT}"
 }
 
 write_manifest() {
@@ -124,13 +109,7 @@ main() {
 
   local failed_arches=()
   for arch in "${ARCHES[@]}"; do
-    log "Starting full workflow for ${arch} (image build + containerized package build)"
-
-    if ! build_builder_image "${arch}"; then
-      log "ERROR: builder image failed for ${arch}"
-      failed_arches+=( "${arch}:image" )
-      break
-    fi
+    log "Starting full workflow for ${arch} (single buildx pipeline)"
 
     if run_build_for_arch "${arch}" "${resolved_tag}"; then
       log "Completed ${arch}; artifacts exported to ${distro_version_dir}/${arch}"

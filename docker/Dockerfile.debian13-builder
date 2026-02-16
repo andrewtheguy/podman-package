@@ -1,0 +1,45 @@
+FROM debian:trixie AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    devscripts \
+    dpkg-dev \
+    equivs \
+    fakeroot \
+    gnupg \
+    patch \
+    quilt \
+    tar \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+FROM base AS build
+
+ARG DISTRO=trixie
+ARG BUILD_VERSION
+ARG PODMAN_TAG
+ARG UPSTREAM_SHA256
+ARG TARGET_ARCH
+
+COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
+COPY scripts/container/in-container-build-debian13.sh /workspace/scripts/container/in-container-build-debian13.sh
+COPY packaging/patches-debian13 /workspace/packaging/patches-debian13
+
+RUN chmod +x /workspace/scripts/container/in-container-build-debian13.sh && \
+    DISTRO="${DISTRO}" \
+    BUILD_VERSION="${BUILD_VERSION}" \
+    PODMAN_TAG="${PODMAN_TAG}" \
+    UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
+    TARGET_ARCH="${TARGET_ARCH}" \
+    /workspace/scripts/container/in-container-build-debian13.sh
+
+FROM scratch AS artifact-export
+
+COPY --from=build /out/ /

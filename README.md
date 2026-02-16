@@ -2,11 +2,17 @@
 
 Build Podman `.deb` packages in Docker for isolated, deterministic builds.
 
-This repository has two zero-argument entrypoints:
+This repository has two zero-argument build entrypoints:
 
 ```bash
 ./scripts/build-podman-deb.sh
 ./scripts/build-podman-deb-debian13.sh
+```
+
+Release upload helper (requires one argument):
+
+```bash
+./scripts/push-deb-assets-to-release.sh <release-tag>
 ```
 
 ## Script Layout
@@ -130,11 +136,29 @@ output/
 ## Prerequisites
 
 - Docker with Buildx support.
+- GitHub CLI (`gh`) authenticated for your target GitHub host when uploading release assets.
 - Network access to:
   - Ubuntu package repositories
   - Debian package repositories
   - Podman source tarballs on GitHub
   - Go toolchain tarballs on `go.dev`
+
+## Upload `.deb` Assets To GitHub Release
+
+Upload all built `.deb` files for a build date to an existing release tag:
+
+```bash
+GITHUB_REPOSITORY=<owner/repo> ./scripts/push-deb-assets-to-release.sh <release-tag>
+```
+
+The upload script always requires and uploads both distro outputs for that build date:
+- `output/noble/<BUILD_VERSION>/...`
+- `output/trixie/<BUILD_VERSION>/...`
+
+Optional environment:
+- `BUILD_VERSION` (default: `date -u +%Y%m%d`)
+- `OUTPUT_ROOT` (default: `output`)
+- `GH_HOST` (default: `github.com`)
 
 ## Runtime Requirement for Newer `pasta` Features
 

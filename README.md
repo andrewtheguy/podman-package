@@ -165,15 +165,15 @@ Optional environment:
 This is a feature-level requirement, not a base Podman package dependency.
 
 Ubuntu 24.04 (`noble`):
-- The archive `passt` build is older and does not provide newer `pasta` options such as `--map-host-loopback` with an address argument.
-- If you need those newer features, install a newer `passt` from Ubuntu `resolute`:
-- In `ubuntu:noble`, package `passt` version `0.0~git20240220.1e6f92b-1` reports `--map-host-loopback` as missing.
+- Requirement for `pasta --map-host-loopback`: `passt >= 0.0~git20250217.a1e48a0-1`.
+- Ubuntu noble currently provides `passt 0.0~git20240220.1e6f92b-1`, which is below that requirement.
+- For noble hosts that need this feature, install `passt` from Ubuntu `plucky` or newer.
 
-- [`passt` in Ubuntu resolute](https://packages.ubuntu.com/resolute/passt)
+- [`passt` in Ubuntu plucky](https://packages.ubuntu.com/plucky/passt)
 
 Debian 13 (`trixie`):
-- No workaround is currently required for this feature.
-- In `debian:trixie`, package `passt` version `0.0~git20250503.587980c-2` includes `--map-host-loopback`.
+- No workaround is required.
+- Debian trixie provides `passt 0.0~git20250503.587980c-2`, which satisfies the requirement above.
 - Quick check:
 
 ```bash

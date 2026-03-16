@@ -87,7 +87,7 @@ Pinned upstream input config:
 - `packaging/versions.env`
 
 ```bash
-PODMAN_TAG=v5.8.0
+PODMAN_TAG=v5.x.x
 UPSTREAM_SHA256=19723cda810e087ded8903fb0f33918b10d81f7fd1d8964880c41ec30d1daa70
 ```
 
@@ -95,6 +95,11 @@ Notes:
 - Both orchestrators source this file directly.
 - `PODMAN_TAG` controls upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
+  To obtain the checksum for a given tag, download the tarball from GitHub and compute its SHA256:
+  ```bash
+  curl -fsSL -L "https://github.com/containers/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
+  ```
+  Use the hex string from the output as the `UPSTREAM_SHA256` value.
 - Go is not separately pinned; it is read from upstream `go.mod` for the pinned tag.
 
 ## Output Layout Example

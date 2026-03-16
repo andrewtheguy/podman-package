@@ -15,7 +15,7 @@ Uploads all *.deb artifacts from both distros:
 for BUILD_VERSION.
 
 Required:
-  <release-tag>               Existing GitHub release tag (for example: v5.8.0-local)
+  <release-tag>               Existing GitHub release tag (for example: vx.x.x-local)
 
 Optional environment:
   GITHUB_REPOSITORY           owner/repo (auto-detected from git remote origin when omitted)

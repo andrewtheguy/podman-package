@@ -170,14 +170,16 @@ jobs:
           cat SHA256SUMS
       - name: Create noble release
         run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
           RELEASE_TAG="${{ needs.prepare.outputs.noble_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#${PODMAN_TAG}-noble-}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} for Ubuntu 24.04 (noble) - ${BUILD_VERSION}" \
+            --title "Podman ${PODMAN_VERSION} for Ubuntu 24.04 (noble) - ${RELEASE_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 24.04 (noble)
 
@@ -214,14 +216,16 @@ jobs:
           cat SHA256SUMS
       - name: Create trixie release
         run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
           RELEASE_TAG="${{ needs.prepare.outputs.trixie_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#${PODMAN_TAG}-trixie-}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} for Debian 13 (trixie) - ${BUILD_VERSION}" \
+            --title "Podman ${PODMAN_VERSION} for Debian 13 (trixie) - ${RELEASE_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Debian 13 (trixie)
 
@@ -258,14 +262,16 @@ jobs:
           cat SHA256SUMS
       - name: Create resolute release
         run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
           RELEASE_TAG="${{ needs.prepare.outputs.resolute_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#${PODMAN_TAG}-resolute-}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} for Ubuntu 26.04 (resolute) - ${BUILD_VERSION}" \
+            --title "Podman ${PODMAN_VERSION} for Ubuntu 26.04 (resolute) - ${RELEASE_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 26.04 (resolute)
 
@@ -302,14 +308,16 @@ jobs:
           cat SHA256SUMS
       - name: Create bookworm release
         run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
           RELEASE_TAG="${{ needs.prepare.outputs.bookworm_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#${PODMAN_TAG}-bookworm-}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} for Debian 12 (bookworm) - ${BUILD_VERSION}" \
+            --title "Podman ${PODMAN_VERSION} for Debian 12 (bookworm) - ${RELEASE_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Debian 12 (bookworm)
 

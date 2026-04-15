@@ -1,4 +1,4 @@
-FROM ubuntu:noble AS base
+FROM ubuntu:resolute AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -23,23 +23,23 @@ WORKDIR /workspace
 
 FROM base AS build
 
-ARG DISTRO=noble
+ARG DISTRO=resolute
 ARG BUILD_VERSION
 ARG PODMAN_TAG
 ARG UPSTREAM_SHA256
 ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
-COPY scripts/container/in-container-build-ubuntu-noble.sh /workspace/scripts/container/in-container-build-ubuntu-noble.sh
-COPY packaging/patches /workspace/packaging/patches
+COPY scripts/container/in-container-build-ubuntu-resolute.sh /workspace/scripts/container/in-container-build-ubuntu-resolute.sh
+COPY packaging/patches-resolute /workspace/packaging/patches-resolute
 
-RUN chmod +x /workspace/scripts/container/in-container-build-ubuntu-noble.sh && \
+RUN chmod +x /workspace/scripts/container/in-container-build-ubuntu-resolute.sh && \
     DISTRO="${DISTRO}" \
     BUILD_VERSION="${BUILD_VERSION}" \
     PODMAN_TAG="${PODMAN_TAG}" \
     UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
     TARGET_ARCH="${TARGET_ARCH}" \
-    /workspace/scripts/container/in-container-build-ubuntu-noble.sh
+    /workspace/scripts/container/in-container-build-ubuntu-resolute.sh
 
 FROM scratch AS artifact-export
 

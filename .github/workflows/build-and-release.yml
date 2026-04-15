@@ -16,6 +16,7 @@ jobs:
       upstream_sha256: ${{ steps.vars.outputs.upstream_sha256 }}
       noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
       trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
+      resolute_release_tag: ${{ steps.tags.outputs.resolute_release_tag }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -34,13 +35,35 @@ jobs:
           PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
 
-          for DISTRO in noble trixie; do
-            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}"
-            SUFFIX=1
-            while gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
-              SUFFIX=$((SUFFIX + 1))
-              TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${SUFFIX}"
+          # Find the greatest existing suffix across all distros so all
+          # releases from this run share the same postfix number.
+          MAX_SUFFIX=0
+          for DISTRO in noble trixie resolute; do
+            SUFFIX=0
+            # Check the base tag (no suffix)
+            if gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              SUFFIX=1
+            fi
+            # Check numbered suffixes
+            N=2
+            while gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${N}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              SUFFIX="${N}"
+              N=$((N + 1))
             done
+            if [[ "${SUFFIX}" -gt "${MAX_SUFFIX}" ]]; then
+              MAX_SUFFIX="${SUFFIX}"
+            fi
+          done
+
+          # Determine the shared tag suffix
+          if [[ "${MAX_SUFFIX}" -eq 0 ]]; then
+            TAG_SUFFIX=""
+          else
+            TAG_SUFFIX="-$((MAX_SUFFIX + 1))"
+          fi
+
+          for DISTRO in noble trixie resolute; do
+            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}${TAG_SUFFIX}"
             echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "Resolved ${DISTRO} release tag: ${TAG}"
           done
@@ -67,6 +90,14 @@ jobs:
             arch: arm64
             runner: ubuntu-24.04-arm
             dockerfile: docker/Dockerfile.debian13-builder
+          - distro: resolute
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.resolute-builder
+          - distro: resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.resolute-builder
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -184,6 +215,50 @@ jobs:
             --title "Podman ${PODMAN_VERSION} for Debian 13 (trixie) - ${BUILD_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Debian 13 (trixie)
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${PODMAN_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-resolute:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-resolute-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-resolute-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create resolute release
+        run: |
+          PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.resolute_release_tag }}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "Podman ${PODMAN_VERSION} for Ubuntu 26.04 (resolute) - ${BUILD_VERSION}" \
+            --notes "$(cat <<EOF
+          ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 26.04 (resolute)
 
           Build date: ${BUILD_VERSION}
           Upstream tag: ${PODMAN_TAG}

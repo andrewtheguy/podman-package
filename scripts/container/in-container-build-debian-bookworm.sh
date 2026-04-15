@@ -239,6 +239,14 @@ build_package() {
   # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
   export RELEASE_VERSION="${PODMAN_TAG}"
 
+  # Podman 5.8+ Makefile tries to build go-md2man from test/tools/vendor/ which
+  # fails with bookworm-era source layout. Symlink the system binary (installed
+  # as a build dependency) so the Makefile skips the vendor build.
+  if command -v go-md2man >/dev/null 2>&1; then
+    mkdir -p "${UPSTREAM_SRC_DIR}/test/tools/build"
+    ln -sf "$(command -v go-md2man)" "${UPSTREAM_SRC_DIR}/test/tools/build/go-md2man"
+  fi
+
   mkdir -p "${OUT_DIR}"
   local build_log="${OUT_DIR}/build.log"
   log "Running dpkg-buildpackage for ${TARGET_ARCH}; logging to ${build_log}"

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /Users/it3/codes/andrew/podman-package/output/noble/20260415/amd64/*.deb /Users/it3/codes/andrew/podman-package/output/noble/20260415/arm64/*.deb)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(ls /Users/it3/codes/andrew/podman-package/output/trixie/20260415/amd64/*.deb /Users/it3/codes/andrew/podman-package/output/trixie/20260415/arm64/*.deb)"
+    ]
+  }
+}

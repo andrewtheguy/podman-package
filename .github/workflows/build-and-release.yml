@@ -1,0 +1,177 @@
+name: Build and Release Podman .deb Packages
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      build_version: ${{ steps.vars.outputs.build_version }}
+      podman_tag: ${{ steps.vars.outputs.podman_tag }}
+      podman_version: ${{ steps.vars.outputs.podman_version }}
+      upstream_sha256: ${{ steps.vars.outputs.upstream_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute shared build variables
+        id: vars
+        run: |
+          source packaging/versions.env
+          echo "build_version=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "podman_tag=${PODMAN_TAG}" >> "$GITHUB_OUTPUT"
+          echo "podman_version=${PODMAN_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha256=${UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: noble
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.noble-builder
+          - distro: noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.noble-builder
+          - distro: trixie
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.debian13-builder
+          - distro: trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.debian13-builder
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build .deb packages
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          PODMAN_TAG: ${{ needs.prepare.outputs.podman_tag }}
+          UPSTREAM_SHA256: ${{ needs.prepare.outputs.upstream_sha256 }}
+        run: |
+          docker build \
+            --pull \
+            --no-cache \
+            --build-arg "DISTRO=${{ matrix.distro }}" \
+            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+            --build-arg "PODMAN_TAG=${PODMAN_TAG}" \
+            --build-arg "UPSTREAM_SHA256=${UPSTREAM_SHA256}" \
+            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
+            --target artifact-export \
+            --output "type=local,dest=output" \
+            --file "${{ matrix.dockerfile }}" \
+            .
+      - name: List built artifacts
+        run: find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ matrix.distro }}-${{ matrix.arch }}
+          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metadata-${{ matrix.distro }}-${{ matrix.arch }}
+          path: |
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  release-noble:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-noble-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-noble-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create noble release
+        run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
+          PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${PODMAN_TAG}-noble-${BUILD_VERSION}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --title "Podman ${PODMAN_VERSION} for Ubuntu 24.04 (noble) - ${BUILD_VERSION}" \
+            --notes "$(cat <<EOF
+          ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 24.04 (noble)
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${PODMAN_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-trixie:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-trixie-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs-trixie-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create trixie release
+        run: |
+          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
+          PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${PODMAN_TAG}-trixie-${BUILD_VERSION}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --title "Podman ${PODMAN_VERSION} for Debian 13 (trixie) - ${BUILD_VERSION}" \
+            --notes "$(cat <<EOF
+          ## Podman ${PODMAN_VERSION} .deb packages for Debian 13 (trixie)
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${PODMAN_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS

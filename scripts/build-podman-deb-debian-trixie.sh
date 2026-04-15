@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 if [[ $# -ne 0 ]]; then
   cat >&2 <<'USAGE'
-Usage: ./scripts/build-podman-deb-debian13.sh
+Usage: ./scripts/build-podman-deb-debian-trixie.sh
 
 This script is intentionally zero-argument.
 USAGE

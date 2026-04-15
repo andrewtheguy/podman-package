@@ -146,67 +146,21 @@ Notes:
 
 ```text
 output/
-  noble/
-    20260216/
+  <distro>/
+    <YYYYMMDD>/
       manifest.txt
-      amd64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-      arm64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-  resolute/
-    20260216/
-      manifest.txt
-      amd64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-      arm64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-  bookworm/
-    20260216/
-      manifest.txt
-      amd64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-      arm64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-  trixie/
-    20260216/
-      manifest.txt
-      amd64/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
-      arm64/
+      <arch>/
         *.deb
         *.changes
         *.buildinfo
         build.log
         SHA256SUMS
 ```
+
+Where:
+- `<distro>` is one of `noble`, `resolute`, `bookworm`, or `trixie`
+- `<YYYYMMDD>` is the UTC build version (for example `20260216`)
+- `<arch>` is `amd64` or `arm64`
 
 ## Prerequisites
 

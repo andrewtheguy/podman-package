@@ -35,13 +35,35 @@ jobs:
           PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
 
+          # Find the greatest existing suffix across all distros so all
+          # releases from this run share the same postfix number.
+          MAX_SUFFIX=0
           for DISTRO in noble trixie resolute; do
-            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}"
-            SUFFIX=1
-            while gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
-              SUFFIX=$((SUFFIX + 1))
-              TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${SUFFIX}"
+            SUFFIX=0
+            # Check the base tag (no suffix)
+            if gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              SUFFIX=1
+            fi
+            # Check numbered suffixes
+            N=2
+            while gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${N}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              SUFFIX="${N}"
+              N=$((N + 1))
             done
+            if [[ "${SUFFIX}" -gt "${MAX_SUFFIX}" ]]; then
+              MAX_SUFFIX="${SUFFIX}"
+            fi
+          done
+
+          # Determine the shared tag suffix
+          if [[ "${MAX_SUFFIX}" -eq 0 ]]; then
+            TAG_SUFFIX=""
+          else
+            TAG_SUFFIX="-$((MAX_SUFFIX + 1))"
+          fi
+
+          for DISTRO in noble trixie resolute; do
+            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}${TAG_SUFFIX}"
             echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "Resolved ${DISTRO} release tag: ${TAG}"
           done

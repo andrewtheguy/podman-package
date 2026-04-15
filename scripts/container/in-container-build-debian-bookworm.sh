@@ -177,6 +177,32 @@ override_dh_golang:
 EOF_RULES
   fi
 
+  if ! grep -q 'Local builder compatibility: stage built binaries and profile scripts for dh_install\.' debian/rules; then
+    if ! awk '
+      /dh_auto_install .*--destdir=debian\/tmp/ && !inserted {
+        print
+        print "\t# Local builder compatibility: stage built binaries and profile scripts for dh_install."
+        print "\tinstall -D -m 0755 bin/podman debian/tmp/usr/bin/podman"
+        print "\tinstall -D -m 0755 bin/rootlessport debian/tmp/usr/bin/rootlessport"
+        print "\tinstall -D -m 0644 docker/podman-docker.sh debian/tmp/etc/profile.d/podman-docker.sh"
+        print "\tinstall -D -m 0644 docker/podman-docker.csh debian/tmp/etc/profile.d/podman-docker.csh"
+        inserted=1
+        next
+      }
+      { print }
+      END {
+        if (!inserted) {
+          exit 1
+        }
+      }
+    ' debian/rules > debian/rules.new; then
+      rm -f debian/rules.new
+      die "unable to patch override_dh_auto_install in debian/rules for bookworm compatibility"
+    fi
+    mv debian/rules.new debian/rules
+    chmod +x debian/rules
+  fi
+
   # Bookworm's libpod packaging (Podman 4.3.1 era) is incompatible with Podman 5.8.x:
   # - dh-golang's dh_auto_configure creates _output as a GOPATH symlink tree;
   #   skip it and just mkdir so dh_auto_clean doesn't chdir-fail.

@@ -33,12 +33,6 @@ Zero-argument scripts for building locally with Docker Buildx:
 ./scripts/build-podman-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
-Local release upload helper (requires one argument):
-
-```bash
-./scripts/push-deb-assets-to-release.sh <release-tag>
-```
-
 ## Script Layout
 
 - GitHub Actions workflow: `.github/workflows/build-and-release.yml`
@@ -163,7 +157,6 @@ GitHub Actions (default):
 
 Local builds:
 - Docker with Buildx support.
-- GitHub CLI (`gh`) authenticated for your target GitHub host when uploading release assets.
 
 Both methods require network access to:
   - Ubuntu package repositories
@@ -176,23 +169,6 @@ Both methods require network access to:
 GitHub Actions creates four separate pre-releases per workflow run (one per distro), each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
 Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>` (e.g., `v5.8.2-noble-20260415`).
-
-## Upload `.deb` Assets To GitHub Release (Local)
-
-For local builds, upload all built `.deb` files for a build date to an existing release tag:
-
-```bash
-GITHUB_REPOSITORY=<owner/repo> ./scripts/push-deb-assets-to-release.sh <release-tag>
-```
-
-The upload script always requires and uploads both distro outputs for that build date:
-- `output/noble/<BUILD_VERSION>/...`
-- `output/trixie/<BUILD_VERSION>/...`
-
-Optional environment:
-- `BUILD_VERSION` (default: `date -u +%Y%m%d`)
-- `OUTPUT_ROOT` (default: `output`)
-- `GH_HOST` (default: `github.com`)
 
 ## Runtime Requirement for Newer `pasta` Features
 

@@ -14,6 +14,10 @@ jobs:
       podman_tag: ${{ steps.vars.outputs.podman_tag }}
       podman_version: ${{ steps.vars.outputs.podman_version }}
       upstream_sha256: ${{ steps.vars.outputs.upstream_sha256 }}
+      noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
+      trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - name: Compute shared build variables
@@ -24,6 +28,22 @@ jobs:
           echo "podman_tag=${PODMAN_TAG}" >> "$GITHUB_OUTPUT"
           echo "podman_version=${PODMAN_TAG#v}" >> "$GITHUB_OUTPUT"
           echo "upstream_sha256=${UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Resolve release tags
+        id: tags
+        run: |
+          PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
+          BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
+
+          for DISTRO in noble trixie; do
+            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}"
+            SUFFIX=1
+            while gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              SUFFIX=$((SUFFIX + 1))
+              TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${SUFFIX}"
+            done
+            echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Resolved ${DISTRO} release tag: ${TAG}"
+          done
 
   build:
     needs: prepare
@@ -110,10 +130,9 @@ jobs:
           cat SHA256SUMS
       - name: Create noble release
         run: |
-          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
-          RELEASE_TAG="${PODMAN_TAG}-noble-${BUILD_VERSION}"
+          RELEASE_TAG="${{ needs.prepare.outputs.noble_release_tag }}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
@@ -155,10 +174,9 @@ jobs:
           cat SHA256SUMS
       - name: Create trixie release
         run: |
-          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
           PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
           BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
-          RELEASE_TAG="${PODMAN_TAG}-trixie-${BUILD_VERSION}"
+          RELEASE_TAG="${{ needs.prepare.outputs.trixie_release_tag }}"
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \

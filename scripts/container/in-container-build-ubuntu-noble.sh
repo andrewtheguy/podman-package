@@ -11,10 +11,13 @@ fi
 : "${PODMAN_TAG:?PODMAN_TAG is required}"
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
+: "${BUILD_REVISION:=1}"
 : "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=noble}"
 
-PATCH_SOURCE_DIR="/workspace/packaging/patches-noble"
+[[ "${BUILD_REVISION}" =~ ^[1-9][0-9]*$ ]] || die "BUILD_REVISION must be a positive integer: ${BUILD_REVISION}"
+
+PATCH_SOURCE_DIR="/workspace/packaging/patches-ubuntu-noble"
 [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
 [[ -f "${PATCH_SOURCE_DIR}/series" ]] || die "missing patch series file: ${PATCH_SOURCE_DIR}/series"
 
@@ -192,7 +195,8 @@ update_changelog() {
   cd "${UPSTREAM_SRC_DIR}"
 
   local debianized_upstream="${UPSTREAM_VERSION//-rc/~rc}"
-  local package_version="${debianized_upstream}+local1.${BUILD_VERSION}~${DISTRO}"
+  local build_id="${BUILD_VERSION}-${BUILD_REVISION}"
+  local package_version="${debianized_upstream}+${build_id}~${DISTRO}"
 
   export DEBFULLNAME="Podman Noble Builder"
   export DEBEMAIL="builder@example.invalid"
@@ -201,7 +205,7 @@ update_changelog() {
     --distribution "${DISTRO}" \
     --force-distribution \
     --newversion "${package_version}" \
-    "Build upstream ${PODMAN_TAG} (${BUILD_VERSION}) with Ubuntu ${DISTRO} packaging and repo-managed patch series."
+    "Build upstream ${PODMAN_TAG} (${build_id}) with Ubuntu ${DISTRO} packaging and repo-managed patch series."
 }
 
 install_build_deps() {
@@ -217,7 +221,7 @@ install_build_deps() {
 build_package() {
   cd "${UPSTREAM_SRC_DIR}"
 
-  log "Applying patch series from /workspace/packaging/patches-noble/series"
+  log "Applying patch series from /workspace/packaging/patches-ubuntu-noble/series"
   dpkg-source --before-build .
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).

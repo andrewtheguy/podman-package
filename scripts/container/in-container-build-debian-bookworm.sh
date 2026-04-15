@@ -11,10 +11,13 @@ fi
 : "${PODMAN_TAG:?PODMAN_TAG is required}"
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
+: "${BUILD_REVISION:=1}"
 : "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=bookworm}"
 
-PATCH_SOURCE_DIR="/workspace/packaging/patches-bookworm"
+[[ "${BUILD_REVISION}" =~ ^[1-9][0-9]*$ ]] || die "BUILD_REVISION must be a positive integer: ${BUILD_REVISION}"
+
+PATCH_SOURCE_DIR="/workspace/packaging/patches-debian-bookworm"
 [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
 [[ -f "${PATCH_SOURCE_DIR}/series" ]] || die "missing patch series file: ${PATCH_SOURCE_DIR}/series"
 
@@ -30,10 +33,10 @@ setup_sources() {
   cat > /etc/apt/sources.list <<EOF_APT
 deb http://deb.debian.org/debian ${DISTRO} main
 deb http://deb.debian.org/debian ${DISTRO}-updates main
-deb http://deb.debian.org/debian-security ${DISTRO}-security main/updates
+deb http://deb.debian.org/debian-security ${DISTRO}-security main
 deb-src http://deb.debian.org/debian ${DISTRO} main
 deb-src http://deb.debian.org/debian ${DISTRO}-updates main
-deb-src http://deb.debian.org/debian-security ${DISTRO}-security main/updates
+deb-src http://deb.debian.org/debian-security ${DISTRO}-security main
 EOF_APT
 }
 
@@ -176,6 +179,48 @@ override_dh_golang:
 	true
 EOF_RULES
   fi
+
+  if ! grep -q 'Local builder compatibility: stage built binaries and profile scripts for dh_install\.' debian/rules; then
+    if ! awk '
+      /dh_auto_install .*--destdir=debian\/tmp/ && !inserted {
+        print
+        print "\t# Local builder compatibility: stage built binaries and profile scripts for dh_install."
+        print "\tinstall -D -m 0755 bin/podman debian/tmp/usr/bin/podman"
+        print "\tinstall -D -m 0755 bin/rootlessport debian/tmp/usr/bin/rootlessport"
+        print "\tinstall -D -m 0644 docker/podman-docker.sh debian/tmp/etc/profile.d/podman-docker.sh"
+        print "\tinstall -D -m 0644 docker/podman-docker.csh debian/tmp/etc/profile.d/podman-docker.csh"
+        inserted=1
+        next
+      }
+      { print }
+      END {
+        if (!inserted) {
+          exit 1
+        }
+      }
+    ' debian/rules > debian/rules.new; then
+      rm -f debian/rules.new
+      die "unable to patch override_dh_auto_install in debian/rules for bookworm compatibility"
+    fi
+    mv debian/rules.new debian/rules
+    chmod +x debian/rules
+  fi
+
+  # Bookworm's libpod packaging (Podman 4.3.1 era) is incompatible with Podman 5.8.x:
+  # - dh-golang's dh_auto_configure creates _output as a GOPATH symlink tree;
+  #   skip it and just mkdir so dh_auto_clean doesn't chdir-fail.
+  # - dh_auto_build runs "go generate" on all packages which fails with 5.8.x;
+  #   use upstream Makefile targets directly instead.
+  # Appending at EOF: last definition wins in GNU Make, so these override any
+  # earlier definitions without needing to remove them.
+  cat >> debian/rules <<'EOF_BOOKWORM'
+
+override_dh_auto_configure:
+	mkdir -p _output
+
+override_dh_auto_build:
+	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=go-md2man podman podman-remote rootlessport quadlet docs docker-docs
+EOF_BOOKWORM
 }
 
 patch_debian_packaging() {
@@ -204,7 +249,8 @@ update_changelog() {
   cd "${UPSTREAM_SRC_DIR}"
 
   local debianized_upstream="${UPSTREAM_VERSION//-rc/~rc}"
-  local package_version="${debianized_upstream}+local1.${BUILD_VERSION}~${DISTRO}"
+  local build_id="${BUILD_VERSION}-${BUILD_REVISION}"
+  local package_version="${debianized_upstream}+${build_id}~${DISTRO}"
 
   export DEBFULLNAME="Podman Bookworm Builder"
   export DEBEMAIL="builder@example.invalid"
@@ -213,7 +259,7 @@ update_changelog() {
     --distribution "${DISTRO}" \
     --force-distribution \
     --newversion "${package_version}" \
-    "Build upstream ${PODMAN_TAG} (${BUILD_VERSION}) with Debian ${DISTRO} packaging and repo-managed patch series."
+    "Build upstream ${PODMAN_TAG} (${build_id}) with Debian ${DISTRO} packaging and repo-managed patch series."
 }
 
 install_build_deps() {
@@ -229,13 +275,23 @@ install_build_deps() {
 build_package() {
   cd "${UPSTREAM_SRC_DIR}"
 
-  log "Applying patch series from /workspace/packaging/patches-bookworm/series"
+  log "Applying patch series from /workspace/packaging/patches-debian-bookworm/series"
   dpkg-source --before-build .
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).
   # Keep behavior deterministic by always skipping build-time tests.
   export DEB_BUILD_OPTIONS="nocheck"
   export GOTELEMETRY="off"
+  # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
+  export RELEASE_VERSION="${PODMAN_TAG}"
+
+  # Podman 5.8+ Makefile tries to build go-md2man from test/tools/vendor/ which
+  # fails with bookworm-era source layout. Symlink the system binary (installed
+  # as a build dependency) so the Makefile skips the vendor build.
+  if command -v go-md2man >/dev/null 2>&1; then
+    mkdir -p "${UPSTREAM_SRC_DIR}/test/tools/build"
+    ln -sf "$(command -v go-md2man)" "${UPSTREAM_SRC_DIR}/test/tools/build/go-md2man"
+  fi
 
   mkdir -p "${OUT_DIR}"
   local build_log="${OUT_DIR}/build.log"

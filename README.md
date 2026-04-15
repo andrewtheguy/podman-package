@@ -28,9 +28,9 @@ On success, three **pre-releases** are created automatically:
 Zero-argument scripts for building locally with Docker Buildx:
 
 ```bash
-./scripts/build-podman-deb.sh            # Ubuntu 24.04 (noble)
-./scripts/build-podman-deb-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-podman-deb-debian13.sh   # Debian 13 (trixie)
+./scripts/build-podman-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-podman-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-podman-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
 Local release upload helper (requires one argument):

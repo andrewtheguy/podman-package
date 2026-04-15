@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 if [[ $# -ne 0 ]]; then
   cat >&2 <<'EOF'
-Usage: ./scripts/build-podman-deb-resolute.sh
+Usage: ./scripts/build-podman-deb-ubuntu-resolute.sh
 
 This script is intentionally zero-argument.
 EOF

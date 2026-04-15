@@ -30,10 +30,10 @@ setup_sources() {
   cat > /etc/apt/sources.list <<EOF_APT
 deb http://deb.debian.org/debian ${DISTRO} main
 deb http://deb.debian.org/debian ${DISTRO}-updates main
-deb http://deb.debian.org/debian-security ${DISTRO}-security main/updates
+deb http://deb.debian.org/debian-security ${DISTRO}-security main
 deb-src http://deb.debian.org/debian ${DISTRO} main
 deb-src http://deb.debian.org/debian ${DISTRO}-updates main
-deb-src http://deb.debian.org/debian-security ${DISTRO}-security main/updates
+deb-src http://deb.debian.org/debian-security ${DISTRO}-security main
 EOF_APT
 }
 
@@ -236,6 +236,8 @@ build_package() {
   # Keep behavior deterministic by always skipping build-time tests.
   export DEB_BUILD_OPTIONS="nocheck"
   export GOTELEMETRY="off"
+  # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
+  export RELEASE_VERSION="${PODMAN_TAG}"
 
   mkdir -p "${OUT_DIR}"
   local build_log="${OUT_DIR}/build.log"

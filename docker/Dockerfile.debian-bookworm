@@ -31,7 +31,7 @@ ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
 COPY scripts/container/in-container-build-debian-bookworm.sh /workspace/scripts/container/in-container-build-debian-bookworm.sh
-COPY packaging/patches-bookworm /workspace/packaging/patches-bookworm
+COPY packaging/patches-debian-bookworm /workspace/packaging/patches-debian-bookworm
 
 RUN chmod +x /workspace/scripts/container/in-container-build-debian-bookworm.sh && \
     DISTRO="${DISTRO}" \

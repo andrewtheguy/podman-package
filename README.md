@@ -6,18 +6,14 @@ Build Podman `.deb` packages in Docker for isolated, deterministic builds.
 
 The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
 
-The workflow builds all 8 combinations in parallel on native GitHub runners:
+The workflow builds all 8 distro/architecture combinations in parallel:
 
-| Distro | Architecture | Runner |
-|--------|-------------|--------|
-| Ubuntu 24.04 (noble) | amd64 | `ubuntu-24.04` |
-| Ubuntu 24.04 (noble) | arm64 | `ubuntu-24.04-arm` |
-| Ubuntu 26.04 (resolute) | amd64 | `ubuntu-24.04` |
-| Ubuntu 26.04 (resolute) | arm64 | `ubuntu-24.04-arm` |
-| Debian 12 (bookworm) | amd64 | `ubuntu-24.04` |
-| Debian 12 (bookworm) | arm64 | `ubuntu-24.04-arm` |
-| Debian 13 (trixie) | amd64 | `ubuntu-24.04` |
-| Debian 13 (trixie) | arm64 | `ubuntu-24.04-arm` |
+| Distro | Architectures |
+|--------|---------------|
+| Ubuntu 24.04 (noble) | amd64 + arm64 |
+| Ubuntu 26.04 (resolute) | amd64 + arm64 |
+| Debian 12 (bookworm) | amd64 + arm64 |
+| Debian 13 (trixie) | amd64 + arm64 |
 
 On success, four **pre-releases** are created automatically:
 
@@ -101,21 +97,18 @@ Per-architecture run behavior:
 
 No runtime fallback or auto-detection is used.
 
-Ubuntu 24.04 (`noble`) patch source:
-- `packaging/patches-noble/series`
-- `packaging/patches-noble/*.patch`
+Patch directory convention:
+- `packaging/patches-<family>-<codename>/series`
+- `packaging/patches-<family>-<codename>/*.patch`
 
-Ubuntu 26.04 (`resolute`) patch source:
-- `packaging/patches-resolute/series`
-- `packaging/patches-resolute/*.patch`
+Current mappings:
 
-Debian 12 (`bookworm`) patch source:
-- `packaging/patches-bookworm/series`
-- `packaging/patches-bookworm/*.patch`
-
-Debian 13 (`trixie`) patch source:
-- `packaging/patches-debian13/series`
-- `packaging/patches-debian13/*.patch`
+| Distro | Patch Directory |
+|--------|-----------------|
+| Ubuntu 24.04 (`noble`) | `packaging/patches-ubuntu-noble/` |
+| Ubuntu 26.04 (`resolute`) | `packaging/patches-ubuntu-resolute/` |
+| Debian 12 (`bookworm`) | `packaging/patches-debian-bookworm/` |
+| Debian 13 (`trixie`) | `packaging/patches-debian-trixie/` |
 
 Notes:
 - Each workflow uses its own `series` file exactly as-is.

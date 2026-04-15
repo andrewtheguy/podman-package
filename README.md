@@ -2,14 +2,34 @@
 
 Build Podman `.deb` packages in Docker for isolated, deterministic builds.
 
-This repository has two zero-argument build entrypoints:
+## GitHub Actions (Default)
+
+The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
+
+The workflow builds all 4 combinations in parallel on native GitHub runners:
+
+| Distro | Architecture | Runner |
+|--------|-------------|--------|
+| Ubuntu 24.04 (noble) | amd64 | `ubuntu-24.04` |
+| Ubuntu 24.04 (noble) | arm64 | `ubuntu-24.04-arm` |
+| Debian 13 (trixie) | amd64 | `ubuntu-24.04` |
+| Debian 13 (trixie) | arm64 | `ubuntu-24.04-arm` |
+
+On success, two **pre-releases** are created automatically:
+
+- `v<VERSION>-noble-<YYYYMMDD>` — Ubuntu 24.04 `.deb` files (amd64 + arm64) + SHA256SUMS
+- `v<VERSION>-trixie-<YYYYMMDD>` — Debian 13 `.deb` files (amd64 + arm64) + SHA256SUMS
+
+## Local Builds
+
+Two zero-argument scripts for building locally with Docker Buildx:
 
 ```bash
 ./scripts/build-podman-deb.sh
 ./scripts/build-podman-deb-debian13.sh
 ```
 
-Release upload helper (requires one argument):
+Local release upload helper (requires one argument):
 
 ```bash
 ./scripts/push-deb-assets-to-release.sh <release-tag>
@@ -17,6 +37,7 @@ Release upload helper (requires one argument):
 
 ## Script Layout
 
+- GitHub Actions workflow: `.github/workflows/build-and-release.yml`
 - Host/orchestrator scripts remain under `scripts/`.
 - In-container build scripts are under `scripts/container/`.
 - Shared helpers remain under `scripts/lib/`.
@@ -52,9 +73,10 @@ Per-architecture run behavior:
 
 ## What The Build Does
 
-- Runs entirely in Docker containers (host only needs Docker + Buildx).
-- Uses one `docker buildx build` pipeline per architecture (no separate `--load` + `docker run` step).
-- Uses `docker buildx --pull --no-cache` for each architecture to ensure fresh apt metadata/security updates on every run.
+- Runs entirely in Docker containers.
+- GitHub Actions: uses native `amd64` and `arm64` runners with `docker build` (BuildKit default). All 4 distro/arch combinations build in parallel.
+- Local: uses `docker buildx build --platform` for cross-compilation. Architectures run sequentially.
+- Uses `--pull --no-cache` for each build to ensure fresh apt metadata/security updates on every run.
 - Uses pinned `PODMAN_TAG` from `packaging/versions.env`.
 - Derives Go toolchain version from upstream Podman `go.mod`.
 - Injects distro packaging (`debian/`) into upstream Podman source.
@@ -88,7 +110,7 @@ Pinned upstream input config:
 
 ```bash
 PODMAN_TAG=v5.x.x
-UPSTREAM_SHA256=19723cda810e087ded8903fb0f33918b10d81f7fd1d8964880c41ec30d1daa70
+UPSTREAM_SHA256=....
 ```
 
 Notes:
@@ -140,17 +162,29 @@ output/
 
 ## Prerequisites
 
+GitHub Actions (default):
+- Repository with Actions enabled and `contents: write` permission for the workflow.
+- Native `arm64` runners require a GitHub Team/Enterprise plan or a public repository.
+
+Local builds:
 - Docker with Buildx support.
 - GitHub CLI (`gh`) authenticated for your target GitHub host when uploading release assets.
-- Network access to:
+
+Both methods require network access to:
   - Ubuntu package repositories
   - Debian package repositories
   - Podman source tarballs on GitHub
   - Go toolchain tarballs on `go.dev`
 
-## Upload `.deb` Assets To GitHub Release
+## Releases
 
-Upload all built `.deb` files for a build date to an existing release tag:
+GitHub Actions creates two separate pre-releases per workflow run (one per distro), each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+
+Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>` (e.g., `v5.8.2-noble-20260415`).
+
+## Upload `.deb` Assets To GitHub Release (Local)
+
+For local builds, upload all built `.deb` files for a build date to an existing release tag:
 
 ```bash
 GITHUB_REPOSITORY=<owner/repo> ./scripts/push-deb-assets-to-release.sh <release-tag>

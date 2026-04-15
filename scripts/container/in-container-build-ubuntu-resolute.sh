@@ -236,6 +236,8 @@ build_package() {
   # Keep behavior deterministic by always skipping build-time tests.
   export DEB_BUILD_OPTIONS="nocheck"
   export GOTELEMETRY="off"
+  # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
+  export RELEASE_VERSION="${PODMAN_TAG}"
 
   mkdir -p "${OUT_DIR}"
   local build_log="${OUT_DIR}/build.log"

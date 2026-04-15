@@ -30,7 +30,7 @@ ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
 COPY scripts/container/in-container-build-debian-trixie.sh /workspace/scripts/container/in-container-build-debian-trixie.sh
-COPY packaging/patches-debian13 /workspace/packaging/patches-debian13
+COPY packaging/patches-debian-trixie /workspace/packaging/patches-debian-trixie
 
 RUN chmod +x /workspace/scripts/container/in-container-build-debian-trixie.sh && \
     DISTRO="${DISTRO}" \

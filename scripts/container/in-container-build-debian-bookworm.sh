@@ -14,7 +14,7 @@ fi
 : "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=bookworm}"
 
-PATCH_SOURCE_DIR="/workspace/packaging/patches-bookworm"
+PATCH_SOURCE_DIR="/workspace/packaging/patches-debian-bookworm"
 [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
 [[ -f "${PATCH_SOURCE_DIR}/series" ]] || die "missing patch series file: ${PATCH_SOURCE_DIR}/series"
 
@@ -271,7 +271,7 @@ install_build_deps() {
 build_package() {
   cd "${UPSTREAM_SRC_DIR}"
 
-  log "Applying patch series from /workspace/packaging/patches-bookworm/series"
+  log "Applying patch series from /workspace/packaging/patches-debian-bookworm/series"
   dpkg-source --before-build .
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).

@@ -78,35 +78,35 @@ jobs:
           - distro: noble
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.noble-builder
+            dockerfile: docker/Dockerfile.ubuntu-noble
           - distro: noble
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.noble-builder
+            dockerfile: docker/Dockerfile.ubuntu-noble
           - distro: trixie
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.debian13-builder
+            dockerfile: docker/Dockerfile.debian-trixie
           - distro: trixie
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.debian13-builder
+            dockerfile: docker/Dockerfile.debian-trixie
           - distro: resolute
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.resolute-builder
+            dockerfile: docker/Dockerfile.ubuntu-resolute
           - distro: resolute
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.resolute-builder
+            dockerfile: docker/Dockerfile.ubuntu-resolute
           - distro: bookworm
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.bookworm-builder
+            dockerfile: docker/Dockerfile.debian-bookworm
           - distro: bookworm
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.bookworm-builder
+            dockerfile: docker/Dockerfile.debian-bookworm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

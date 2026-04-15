@@ -190,7 +190,7 @@ override_dh_auto_configure:
 	mkdir -p _output
 
 override_dh_auto_build:
-	$(MAKE) GOMD2MAN=go-md2man podman podman-remote rootlessport quadlet docs docker-docs
+	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=go-md2man podman podman-remote rootlessport quadlet docs docker-docs
 EOF_BOOKWORM
 }
 

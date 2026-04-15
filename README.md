@@ -2,25 +2,26 @@
 
 Build Podman `.deb` packages in Docker for isolated, deterministic builds.
 
+## Supported Platforms
+
+All supported platforms build for both architectures: `amd64` and `arm64`.
+
+| Platform | Codename |
+|----------|----------|
+| Ubuntu 24.04 | `noble` |
+| Ubuntu 26.04 | `resolute` |
+| Debian 12 | `bookworm` |
+| Debian 13 | `trixie` |
+
 ## GitHub Actions (Default)
 
 The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
 
-The workflow builds all 8 distro/architecture combinations in parallel:
+The workflow builds all supported platform/architecture combinations in parallel (currently 8 jobs).
 
-| Distro | Architectures |
-|--------|---------------|
-| Ubuntu 24.04 (noble) | amd64 + arm64 |
-| Ubuntu 26.04 (resolute) | amd64 + arm64 |
-| Debian 12 (bookworm) | amd64 + arm64 |
-| Debian 13 (trixie) | amd64 + arm64 |
+On success, one **pre-release** per supported distro codename is created automatically:
 
-On success, four **pre-releases** are created automatically:
-
-- `v<VERSION>-noble-<YYYYMMDD>` — Ubuntu 24.04 `.deb` files (amd64 + arm64) + SHA256SUMS
-- `v<VERSION>-resolute-<YYYYMMDD>` — Ubuntu 26.04 `.deb` files (amd64 + arm64) + SHA256SUMS
-- `v<VERSION>-bookworm-<YYYYMMDD>` — Debian 12 `.deb` files (amd64 + arm64) + SHA256SUMS
-- `v<VERSION>-trixie-<YYYYMMDD>` — Debian 13 `.deb` files (amd64 + arm64) + SHA256SUMS
+- `v<VERSION>-<DISTRO>-<YYYYMMDD>` — `.deb` files for both architectures + `SHA256SUMS`
 
 ## Local Builds
 
@@ -40,13 +41,6 @@ Zero-argument scripts for building locally with Docker Buildx:
 - In-container build scripts are under `scripts/container/`.
 - Shared helpers remain under `scripts/lib/`.
 
-## Targets
-
-- Ubuntu 24.04 codename `noble` (multi-arch: `amd64`, `arm64`)
-- Ubuntu 26.04 codename `resolute` (multi-arch: `amd64`, `arm64`)
-- Debian 12 codename `bookworm` (multi-arch: `amd64`, `arm64`)
-- Debian 13 codename `trixie` (multi-arch: `amd64`, `arm64`)
-
 ## Output Contract
 
 All artifacts are written to:
@@ -54,7 +48,7 @@ All artifacts are written to:
 `output/<distro>/<version>/<architecture>/`
 
 Where:
-- `<distro>` is the codename: `noble`, `resolute`, `bookworm`, or `trixie`
+- `<distro>` is a supported codename from the Support Matrix above
 - `<version>` is UTC date in `YYYYMMDD` format from `date -u +%Y%m%d`
 - `<architecture>` is `amd64` or `arm64`
 
@@ -74,7 +68,7 @@ Per-architecture run behavior:
 ## What The Build Does
 
 - Runs entirely in Docker containers.
-- GitHub Actions: uses native `amd64` and `arm64` runners with `docker build` (BuildKit default). All 8 distro/arch combinations build in parallel.
+- GitHub Actions: uses native `amd64` and `arm64` runners with `docker build` (BuildKit default). All supported distro/arch combinations build in parallel.
 - Local: uses `docker buildx build --platform` for cross-compilation. Architectures run sequentially.
 - Uses `--pull --no-cache` for each build to ensure fresh apt metadata/security updates on every run.
 - Uses pinned `PODMAN_TAG` from `packaging/versions.env`.
@@ -94,15 +88,6 @@ No runtime fallback or auto-detection is used.
 Patch directory convention:
 - `packaging/patches-<family>-<codename>/series`
 - `packaging/patches-<family>-<codename>/*.patch`
-
-Current mappings:
-
-| Distro | Patch Directory |
-|--------|-----------------|
-| Ubuntu 24.04 (`noble`) | `packaging/patches-ubuntu-noble/` |
-| Ubuntu 26.04 (`resolute`) | `packaging/patches-ubuntu-resolute/` |
-| Debian 12 (`bookworm`) | `packaging/patches-debian-bookworm/` |
-| Debian 13 (`trixie`) | `packaging/patches-debian-trixie/` |
 
 Notes:
 - Each workflow uses its own `series` file exactly as-is.
@@ -145,7 +130,7 @@ output/
 ```
 
 Where:
-- `<distro>` is one of `noble`, `resolute`, `bookworm`, or `trixie`
+- `<distro>` is a supported codename from the Support Matrix above
 - `<YYYYMMDD>` is the UTC build version (for example `20260216`)
 - `<arch>` is `amd64` or `arm64`
 
@@ -166,7 +151,7 @@ Both methods require network access to:
 
 ## Releases
 
-GitHub Actions creates four separate pre-releases per workflow run (one per distro), each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+GitHub Actions creates one pre-release per supported distro codename per workflow run, each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
 Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>` (e.g., `v5.8.2-noble-20260415`).
 

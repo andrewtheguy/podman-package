@@ -117,6 +117,7 @@ jobs:
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
+            --prerelease \
             --title "Podman ${PODMAN_VERSION} for Ubuntu 24.04 (noble) - ${BUILD_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 24.04 (noble)
@@ -161,6 +162,7 @@ jobs:
 
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
+            --prerelease \
             --title "Podman ${PODMAN_VERSION} for Debian 13 (trixie) - ${BUILD_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Debian 13 (trixie)

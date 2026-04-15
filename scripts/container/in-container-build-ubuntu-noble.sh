@@ -11,8 +11,11 @@ fi
 : "${PODMAN_TAG:?PODMAN_TAG is required}"
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
+: "${BUILD_REVISION:=1}"
 : "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=noble}"
+
+[[ "${BUILD_REVISION}" =~ ^[1-9][0-9]*$ ]] || die "BUILD_REVISION must be a positive integer: ${BUILD_REVISION}"
 
 PATCH_SOURCE_DIR="/workspace/packaging/patches-ubuntu-noble"
 [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
@@ -192,7 +195,8 @@ update_changelog() {
   cd "${UPSTREAM_SRC_DIR}"
 
   local debianized_upstream="${UPSTREAM_VERSION//-rc/~rc}"
-  local package_version="${debianized_upstream}+local1.${BUILD_VERSION}~${DISTRO}"
+  local build_id="${BUILD_VERSION}-${BUILD_REVISION}"
+  local package_version="${debianized_upstream}+${build_id}~${DISTRO}"
 
   export DEBFULLNAME="Podman Noble Builder"
   export DEBEMAIL="builder@example.invalid"
@@ -201,7 +205,7 @@ update_changelog() {
     --distribution "${DISTRO}" \
     --force-distribution \
     --newversion "${package_version}" \
-    "Build upstream ${PODMAN_TAG} (${BUILD_VERSION}) with Ubuntu ${DISTRO} packaging and repo-managed patch series."
+    "Build upstream ${PODMAN_TAG} (${build_id}) with Ubuntu ${DISTRO} packaging and repo-managed patch series."
 }
 
 install_build_deps() {

@@ -21,7 +21,8 @@ The workflow builds all supported platform/architecture combinations in parallel
 
 On success, one **pre-release** per supported distro codename is created automatically:
 
-- `v<VERSION>-<DISTRO>-<YYYYMMDD>` — `.deb` files for both architectures + `SHA256SUMS`
+- `v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` — `.deb` files for both architectures + `SHA256SUMS`
+  - `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...)
 
 ## Local Builds
 
@@ -153,7 +154,9 @@ Both methods require network access to:
 
 GitHub Actions creates one pre-release per supported distro codename per workflow run, each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
-Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>` (e.g., `v5.8.2-noble-20260415`).
+Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v5.8.2-noble-20260415-1`).
+
+Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `5.8.2+20260415-1~trixie`).
 
 ## Runtime Requirement for Newer `pasta` Features
 

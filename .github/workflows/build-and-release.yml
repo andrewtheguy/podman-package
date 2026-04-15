@@ -14,6 +14,7 @@ jobs:
       podman_tag: ${{ steps.vars.outputs.podman_tag }}
       podman_version: ${{ steps.vars.outputs.podman_version }}
       upstream_sha256: ${{ steps.vars.outputs.upstream_sha256 }}
+      release_revision: ${{ steps.tags.outputs.release_revision }}
       noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
       trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
       resolute_release_tag: ${{ steps.tags.outputs.resolute_release_tag }}
@@ -36,35 +37,33 @@ jobs:
           PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
 
-          # Find the greatest existing suffix across all distros so all
-          # releases from this run share the same postfix number.
-          MAX_SUFFIX=0
+          # Find the greatest existing revision across all distros so all
+          # releases from this run share the same numeric revision.
+          MAX_REVISION=0
           for DISTRO in noble trixie resolute bookworm; do
-            SUFFIX=0
-            # Check the base tag (no suffix)
+            DISTRO_MAX=0
+            # Legacy tags without explicit revision are treated as revision 1.
             if gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-              SUFFIX=1
+              DISTRO_MAX=1
             fi
-            # Check numbered suffixes
-            N=2
-            while gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${N}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
-              SUFFIX="${N}"
-              N=$((N + 1))
+
+            # Check explicit revisioned tags (...-<revision>)
+            REVISION=1
+            while gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              DISTRO_MAX="${REVISION}"
+              REVISION=$((REVISION + 1))
             done
-            if [[ "${SUFFIX}" -gt "${MAX_SUFFIX}" ]]; then
-              MAX_SUFFIX="${SUFFIX}"
+
+            if [[ "${DISTRO_MAX}" -gt "${MAX_REVISION}" ]]; then
+              MAX_REVISION="${DISTRO_MAX}"
             fi
           done
 
-          # Determine the shared tag suffix
-          if [[ "${MAX_SUFFIX}" -eq 0 ]]; then
-            TAG_SUFFIX=""
-          else
-            TAG_SUFFIX="-$((MAX_SUFFIX + 1))"
-          fi
+          RELEASE_REVISION=$((MAX_REVISION + 1))
+          echo "release_revision=${RELEASE_REVISION}" >> "$GITHUB_OUTPUT"
 
           for DISTRO in noble trixie resolute bookworm; do
-            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}${TAG_SUFFIX}"
+            TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${RELEASE_REVISION}"
             echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "Resolved ${DISTRO} release tag: ${TAG}"
           done
@@ -113,6 +112,7 @@ jobs:
       - name: Build .deb packages
         env:
           BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
           PODMAN_TAG: ${{ needs.prepare.outputs.podman_tag }}
           UPSTREAM_SHA256: ${{ needs.prepare.outputs.upstream_sha256 }}
         run: |
@@ -121,6 +121,7 @@ jobs:
             --no-cache \
             --build-arg "DISTRO=${{ matrix.distro }}" \
             --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
             --build-arg "PODMAN_TAG=${PODMAN_TAG}" \
             --build-arg "UPSTREAM_SHA256=${UPSTREAM_SHA256}" \
             --build-arg "TARGET_ARCH=${{ matrix.arch }}" \

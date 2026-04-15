@@ -24,6 +24,7 @@ FROM base AS build
 
 ARG DISTRO=trixie
 ARG BUILD_VERSION
+ARG BUILD_REVISION=1
 ARG PODMAN_TAG
 ARG UPSTREAM_SHA256
 ARG TARGET_ARCH
@@ -35,6 +36,7 @@ COPY packaging/patches-debian-trixie /workspace/packaging/patches-debian-trixie
 RUN chmod +x /workspace/scripts/container/in-container-build-debian-trixie.sh && \
     DISTRO="${DISTRO}" \
     BUILD_VERSION="${BUILD_VERSION}" \
+    BUILD_REVISION="${BUILD_REVISION}" \
     PODMAN_TAG="${PODMAN_TAG}" \
     UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
     TARGET_ARCH="${TARGET_ARCH}" \

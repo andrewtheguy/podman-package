@@ -40,6 +40,7 @@ check_patch_source() {
 run_build_for_arch() {
   local arch="$1"
   local tag="$2"
+  local revision="${BUILD_REVISION:-1}"
   local pipeline_label="${PIPELINE_LABEL:-single buildx pipeline}"
 
   log "Running ${pipeline_label} for ${arch} with Podman ${tag}"
@@ -49,6 +50,7 @@ run_build_for_arch() {
     --platform "linux/${arch}" \
     --build-arg "DISTRO=${DISTRO}" \
     --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+    --build-arg "BUILD_REVISION=${revision}" \
     --build-arg "PODMAN_TAG=${tag}" \
     --build-arg "UPSTREAM_SHA256=${PINNED_UPSTREAM_SHA256}" \
     --build-arg "TARGET_ARCH=${arch}" \
@@ -60,6 +62,7 @@ run_build_for_arch() {
 
 write_manifest() {
   local tag="$1"
+  local revision="${BUILD_REVISION:-1}"
   local tag_dir="${OUTPUT_ROOT}/${DISTRO}/${BUILD_VERSION}"
   local manifest_path="${tag_dir}/manifest.txt"
 
@@ -68,6 +71,8 @@ write_manifest() {
     echo "podman_tag=${tag}"
     echo "distro=${DISTRO}"
     echo "build_version=${BUILD_VERSION}"
+    echo "build_revision=${revision}"
+    echo "build_id=${BUILD_VERSION}-${revision}"
     echo "generated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     for arch in "${ARCHES[@]}"; do

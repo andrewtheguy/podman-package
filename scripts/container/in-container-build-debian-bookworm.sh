@@ -5,16 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../lib/common.sh"
 
 if [[ $# -ne 0 ]]; then
-  die "in-container build script does not accept arguments"
+  die "in-container Debian 12 build script does not accept arguments"
 fi
 
 : "${PODMAN_TAG:?PODMAN_TAG is required}"
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
 : "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
-: "${DISTRO:=noble}"
+: "${DISTRO:=bookworm}"
 
-PATCH_SOURCE_DIR="/workspace/packaging/patches-noble"
+PATCH_SOURCE_DIR="/workspace/packaging/patches-bookworm"
 [[ -d "${PATCH_SOURCE_DIR}" ]] || die "patch directory not found: ${PATCH_SOURCE_DIR}"
 [[ -f "${PATCH_SOURCE_DIR}/series" ]] || die "missing patch series file: ${PATCH_SOURCE_DIR}/series"
 
@@ -22,16 +22,19 @@ WORK_ROOT="/tmp/podman-build"
 OUT_DIR="/out/${DISTRO}/${BUILD_VERSION}/${TARGET_ARCH}"
 GO_TOOLCHAIN_VERSION=""
 GO_TOOLCHAIN_ARCH=""
+DEBIAN_SRC_DIR=""
+UPSTREAM_VERSION=""
+UPSTREAM_SRC_DIR=""
 
 setup_sources() {
-  [[ "${DISTRO}" =~ ^[a-z][a-z0-9-]*$ ]] || \
-    die "setup_sources: invalid DISTRO='${DISTRO}' (expected lower-case letters, digits, or hyphens) for /etc/apt/sources.list.d/ubuntu-src.list"
-
-  cat > /etc/apt/sources.list.d/ubuntu-src.list <<EOF
-deb-src http://archive.ubuntu.com/ubuntu ${DISTRO} main universe multiverse restricted
-deb-src http://archive.ubuntu.com/ubuntu ${DISTRO}-updates main universe multiverse restricted
-deb-src http://archive.ubuntu.com/ubuntu ${DISTRO}-security main universe multiverse restricted
-EOF
+  cat > /etc/apt/sources.list <<EOF_APT
+deb http://deb.debian.org/debian ${DISTRO} main
+deb http://deb.debian.org/debian ${DISTRO}-updates main
+deb http://deb.debian.org/debian-security ${DISTRO}-security main
+deb-src http://deb.debian.org/debian ${DISTRO} main
+deb-src http://deb.debian.org/debian ${DISTRO}-updates main
+deb-src http://deb.debian.org/debian-security ${DISTRO}-security main
+EOF_APT
 }
 
 install_prereqs() {
@@ -54,10 +57,10 @@ prepare_sources() {
   mkdir -p "${WORK_ROOT}"
   cd "${WORK_ROOT}"
 
-  log "Fetching Ubuntu ${DISTRO} libpod source package"
+  log "Fetching Debian ${DISTRO} libpod source package"
   apt-get source -qq libpod
-  UBUNTU_SRC_DIR="$(find "${WORK_ROOT}" -maxdepth 1 -mindepth 1 -type d -name 'libpod-*' | head -n 1)"
-  [[ -n "${UBUNTU_SRC_DIR}" ]] || die "unable to locate unpacked Ubuntu libpod source directory"
+  DEBIAN_SRC_DIR="$(find "${WORK_ROOT}" -maxdepth 1 -mindepth 1 -type d -name 'libpod-*' | head -n 1)"
+  [[ -n "${DEBIAN_SRC_DIR}" ]] || die "unable to locate unpacked Debian libpod source directory"
 
   local upstream_version="${PODMAN_TAG#v}"
   UPSTREAM_VERSION="${upstream_version}"
@@ -78,21 +81,30 @@ prepare_sources() {
 
   UPSTREAM_SRC_DIR="${WORK_ROOT}/podman-${upstream_version}"
   [[ -d "${UPSTREAM_SRC_DIR}" ]] || die "unable to locate unpacked upstream source directory"
-  cp -a "${UBUNTU_SRC_DIR}/debian" "${UPSTREAM_SRC_DIR}/"
+  cp -a "${DEBIAN_SRC_DIR}/debian" "${UPSTREAM_SRC_DIR}/"
 
-  # Ubuntu noble packaging expects this legacy CNI config path at install time.
-  # Upstream Podman no longer ships it in recent tags, so carry it from Ubuntu source.
-  local ubuntu_cni_config="${UBUNTU_SRC_DIR}/cni/87-podman-bridge.conflist"
-  [[ -f "${ubuntu_cni_config}" ]] || die "required Ubuntu asset missing: ${ubuntu_cni_config}"
-  mkdir -p "${UPSTREAM_SRC_DIR}/cni"
-  cp -a "${ubuntu_cni_config}" "${UPSTREAM_SRC_DIR}/cni/"
+  local debian_cni_config="${DEBIAN_SRC_DIR}/cni/87-podman-bridge.conflist"
+  if [[ -f "${debian_cni_config}" ]]; then
+    mkdir -p "${UPSTREAM_SRC_DIR}/cni"
+    cp -a "${debian_cni_config}" "${UPSTREAM_SRC_DIR}/cni/"
+  fi
 
-  # Deterministic patch policy: replace Ubuntu patches with repository-managed patches.
+  # Deterministic patch policy: replace distro patches with repository-managed patches.
   rm -rf "${UPSTREAM_SRC_DIR}/debian/patches"
   mkdir -p "${UPSTREAM_SRC_DIR}/debian/patches"
   cp -a "${PATCH_SOURCE_DIR}/." "${UPSTREAM_SRC_DIR}/debian/patches/"
 
   GO_TOOLCHAIN_VERSION="$(awk '/^go[[:space:]]+[0-9]+\.[0-9]+(\.[0-9]+)?$/ {print $2; exit}' "${UPSTREAM_SRC_DIR}/go.mod")"
+  if [[ -z "${GO_TOOLCHAIN_VERSION}" ]]; then
+    GO_TOOLCHAIN_VERSION="$(awk '
+      /^toolchain[[:space:]]+go[0-9]+\.[0-9]+(\.[0-9]+)?$/ {
+        version=$2
+        sub(/^go/, "", version)
+        print version
+        exit
+      }
+    ' "${UPSTREAM_SRC_DIR}/go.mod")"
+  fi
   [[ -n "${GO_TOOLCHAIN_VERSION}" ]] || die "unable to read required Go version from ${UPSTREAM_SRC_DIR}/go.mod"
 }
 
@@ -157,13 +169,55 @@ patch_debian_rules() {
   fi
 
   if ! grep -q '^override_dh_golang:' debian/rules; then
-    cat >> debian/rules <<'EOF'
+    cat >> debian/rules <<'EOF_RULES'
 
 override_dh_golang:
 	@echo "Skipping dh_golang in local builder workflow"
 	true
-EOF
+EOF_RULES
   fi
+
+  if ! grep -q 'Local builder compatibility: stage built binaries and profile scripts for dh_install\.' debian/rules; then
+    if ! awk '
+      /dh_auto_install .*--destdir=debian\/tmp/ && !inserted {
+        print
+        print "\t# Local builder compatibility: stage built binaries and profile scripts for dh_install."
+        print "\tinstall -D -m 0755 bin/podman debian/tmp/usr/bin/podman"
+        print "\tinstall -D -m 0755 bin/rootlessport debian/tmp/usr/bin/rootlessport"
+        print "\tinstall -D -m 0644 docker/podman-docker.sh debian/tmp/etc/profile.d/podman-docker.sh"
+        print "\tinstall -D -m 0644 docker/podman-docker.csh debian/tmp/etc/profile.d/podman-docker.csh"
+        inserted=1
+        next
+      }
+      { print }
+      END {
+        if (!inserted) {
+          exit 1
+        }
+      }
+    ' debian/rules > debian/rules.new; then
+      rm -f debian/rules.new
+      die "unable to patch override_dh_auto_install in debian/rules for bookworm compatibility"
+    fi
+    mv debian/rules.new debian/rules
+    chmod +x debian/rules
+  fi
+
+  # Bookworm's libpod packaging (Podman 4.3.1 era) is incompatible with Podman 5.8.x:
+  # - dh-golang's dh_auto_configure creates _output as a GOPATH symlink tree;
+  #   skip it and just mkdir so dh_auto_clean doesn't chdir-fail.
+  # - dh_auto_build runs "go generate" on all packages which fails with 5.8.x;
+  #   use upstream Makefile targets directly instead.
+  # Appending at EOF: last definition wins in GNU Make, so these override any
+  # earlier definitions without needing to remove them.
+  cat >> debian/rules <<'EOF_BOOKWORM'
+
+override_dh_auto_configure:
+	mkdir -p _output
+
+override_dh_auto_build:
+	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=go-md2man podman podman-remote rootlessport quadlet docs docker-docs
+EOF_BOOKWORM
 }
 
 patch_debian_packaging() {
@@ -194,14 +248,14 @@ update_changelog() {
   local debianized_upstream="${UPSTREAM_VERSION//-rc/~rc}"
   local package_version="${debianized_upstream}+local1.${BUILD_VERSION}~${DISTRO}"
 
-  export DEBFULLNAME="Podman Noble Builder"
+  export DEBFULLNAME="Podman Bookworm Builder"
   export DEBEMAIL="builder@example.invalid"
 
   dch \
     --distribution "${DISTRO}" \
     --force-distribution \
     --newversion "${package_version}" \
-    "Build upstream ${PODMAN_TAG} (${BUILD_VERSION}) with Ubuntu ${DISTRO} packaging and repo-managed patch series."
+    "Build upstream ${PODMAN_TAG} (${BUILD_VERSION}) with Debian ${DISTRO} packaging and repo-managed patch series."
 }
 
 install_build_deps() {
@@ -217,15 +271,23 @@ install_build_deps() {
 build_package() {
   cd "${UPSTREAM_SRC_DIR}"
 
-  log "Applying patch series from /workspace/packaging/patches-noble/series"
+  log "Applying patch series from /workspace/packaging/patches-bookworm/series"
   dpkg-source --before-build .
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).
-  # Keep behavior deterministic by always skipping Debian build-time tests.
+  # Keep behavior deterministic by always skipping build-time tests.
   export DEB_BUILD_OPTIONS="nocheck"
   export GOTELEMETRY="off"
   # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
   export RELEASE_VERSION="${PODMAN_TAG}"
+
+  # Podman 5.8+ Makefile tries to build go-md2man from test/tools/vendor/ which
+  # fails with bookworm-era source layout. Symlink the system binary (installed
+  # as a build dependency) so the Makefile skips the vendor build.
+  if command -v go-md2man >/dev/null 2>&1; then
+    mkdir -p "${UPSTREAM_SRC_DIR}/test/tools/build"
+    ln -sf "$(command -v go-md2man)" "${UPSTREAM_SRC_DIR}/test/tools/build/go-md2man"
+  fi
 
   mkdir -p "${OUT_DIR}"
   local build_log="${OUT_DIR}/build.log"
@@ -262,7 +324,7 @@ collect_artifacts() {
 }
 
 main() {
-  log "Starting containerized build for ${TARGET_ARCH} (${PODMAN_TAG})"
+  log "Starting Debian 12 containerized build for ${TARGET_ARCH} (${PODMAN_TAG})"
   setup_sources
   install_prereqs
   prepare_sources
@@ -273,7 +335,7 @@ main() {
   install_build_deps
   build_package
   collect_artifacts
-  log "Completed build for ${TARGET_ARCH} (${PODMAN_TAG})"
+  log "Completed Debian 12 build for ${TARGET_ARCH} (${PODMAN_TAG})"
 }
 
 main

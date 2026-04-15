@@ -176,6 +176,16 @@ override_dh_golang:
 	true
 EOF_RULES
   fi
+
+  # Bookworm's libpod packaging (Podman 4.3.1 era) uses dh-golang's dh_auto_build
+  # which runs "go generate" on all packages — incompatible with Podman 5.8.x.
+  # Replace override_dh_auto_build to use upstream Makefile targets directly.
+  sed -i '/^override_dh_auto_build:/,/^[^\t]/{ /^override_dh_auto_build:/d; /^\t/d; }' debian/rules
+  cat >> debian/rules <<'EOF_BUILD'
+
+override_dh_auto_build:
+	$(MAKE) GOMD2MAN=go-md2man podman podman-remote rootlessport quadlet docs docker-docs
+EOF_BUILD
 }
 
 patch_debian_packaging() {

@@ -1,0 +1,52 @@
+FROM ubuntu:noble AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    devscripts \
+    dpkg-dev \
+    equivs \
+    fakeroot \
+    gnupg \
+    jq \
+    patch \
+    quilt \
+    tar \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+FROM base AS build
+
+ARG DISTRO=noble
+ARG BUILD_VERSION
+ARG BUILD_REVISION=1
+ARG NETAVARK_TAG
+ARG NETAVARK_UPSTREAM_SHA256
+ARG NETAVARK_VENDOR_SHA256
+ARG RUST_VERSION
+ARG TARGET_ARCH
+
+COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
+COPY scripts/container/in-container-build-netavark-ubuntu-noble.sh /workspace/scripts/container/in-container-build-netavark-ubuntu-noble.sh
+COPY packaging/patches-netavark-ubuntu-noble /workspace/packaging/patches-netavark-ubuntu-noble
+
+RUN chmod +x /workspace/scripts/container/in-container-build-netavark-ubuntu-noble.sh && \
+    DISTRO="${DISTRO}" \
+    BUILD_VERSION="${BUILD_VERSION}" \
+    BUILD_REVISION="${BUILD_REVISION}" \
+    NETAVARK_TAG="${NETAVARK_TAG}" \
+    NETAVARK_UPSTREAM_SHA256="${NETAVARK_UPSTREAM_SHA256}" \
+    NETAVARK_VENDOR_SHA256="${NETAVARK_VENDOR_SHA256}" \
+    RUST_VERSION="${RUST_VERSION}" \
+    TARGET_ARCH="${TARGET_ARCH}" \
+    /workspace/scripts/container/in-container-build-netavark-ubuntu-noble.sh
+
+FROM scratch AS artifact-export
+
+COPY --from=build /out/ /

@@ -1,10 +1,15 @@
 # Podman Package Builders
 
-Build Podman `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman and netavark `.deb` packages in Docker for isolated, deterministic builds.
+
+netavark is the Rust network stack required by Podman 6.0; this repo builds both
+products with the same pattern (distro `debian/` packaging + pinned upstream
+source + repo-managed patches + a self-installed toolchain).
 
 ## Supported Platforms
 
 All supported platforms build for both architectures: `amd64` and `arm64`.
+Both Podman and netavark are built for all three.
 
 | Platform | Codename |
 |----------|----------|
@@ -28,9 +33,15 @@ On success, one **pre-release** per supported distro codename is created automat
 Zero-argument scripts for building locally with Docker Buildx:
 
 ```bash
-./scripts/build-podman-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-podman-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-podman-deb-debian-trixie.sh     # Debian 13 (trixie)
+# Podman
+./scripts/build-podman-deb-ubuntu-noble.sh        # Ubuntu 24.04 (noble)
+./scripts/build-podman-deb-ubuntu-resolute.sh     # Ubuntu 26.04 (resolute)
+./scripts/build-podman-deb-debian-trixie.sh       # Debian 13 (trixie)
+
+# netavark
+./scripts/build-netavark-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-netavark-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-netavark-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
 ## Script Layout
@@ -98,20 +109,35 @@ Pinned upstream input config:
 - `packaging/versions.env`
 
 ```bash
+# Podman (Go)
 PODMAN_TAG=v6.0.0
 UPSTREAM_SHA256=f35ac7c40f0fd01bfedfe627c23ff7a577b071d50f2b0726e4734d51810f5a7d
+
+# netavark (Rust)
+NETAVARK_TAG=v2.0.0
+NETAVARK_UPSTREAM_SHA256=031aeeacc930382e8635d40a885798eff1da164dfcf9024b698f822e5995d9c8
+NETAVARK_VENDOR_SHA256=86de7eb3a4e9ecc4acd5addc462879e8f2bac3562a4b99f12a4be67e5218c2cb
+RUST_VERSION=1.88.0
 ```
 
 Notes:
 - All orchestrators source this file directly.
-- `PODMAN_TAG` controls upstream source tarball selection.
+- `PODMAN_TAG` / `NETAVARK_TAG` control upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
   To obtain the checksum for a given tag, download the tarball from GitHub and compute its SHA256:
   ```bash
   curl -fsSL -L "https://github.com/containers/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
   ```
   Use the hex string from the output as the `UPSTREAM_SHA256` value.
-- Go is not separately pinned; it is read from upstream `go.mod` for the pinned tag.
+- Go is not separately pinned; it is read from upstream `go.mod` for the pinned Podman tag.
+- For netavark, both checksums are required:
+  - `NETAVARK_UPSTREAM_SHA256` matches the GitHub source archive
+    (`.../netavark/archive/refs/tags/v<VERSION>.tar.gz`).
+  - `NETAVARK_VENDOR_SHA256` matches the release vendored-deps tarball
+    (`.../netavark/releases/download/v<VERSION>/netavark-v<VERSION>-vendor.tar.gz`),
+    used for an offline, deterministic cargo build.
+  - `RUST_VERSION` pins the Rust toolchain installed in-container (must be >= netavark's MSRV);
+    it is downloaded and checksum-verified from `static.rust-lang.org`.
 
 ## Output Layout Example
 
@@ -150,11 +176,17 @@ Both methods require network access to:
 
 ## Releases
 
-GitHub Actions creates one pre-release per supported distro codename per workflow run, each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+There are two workflows, each triggered manually (`workflow_dispatch`):
+- **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
+- **Build and Release netavark .deb Packages** — `.github/workflows/build-and-release-netavark.yml`
 
-Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
+Each creates one pre-release per supported distro codename per workflow run, containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
-Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie`).
+Release tag formats:
+- Podman: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
+- netavark: `netavark-v<NETAVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `netavark-v2.0.0-noble-20260415-1`).
+
+Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
 
 ## Runtime Requirement for Newer `pasta` Features
 

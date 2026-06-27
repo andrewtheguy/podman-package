@@ -156,9 +156,9 @@ Both methods require network access to:
 
 GitHub Actions creates a single pre-release per workflow run containing every supported distro's `.deb` files (both architectures) plus a combined SHA256SUMS file. The run opens the release as a draft, builds all distros in parallel, and only publishes (flips draft → pre-release) once all builds succeed. No manual upload is needed.
 
-Release tag format: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v5.8.2-20260415-1`).
+Release tag format: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v<PODMAN_VERSION>-20260415-1`).
 
-Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `5.8.2+20260415-1~trixie`).
+Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `<PODMAN_VERSION>+20260415-1~trixie`).
 
 ## Runtime Requirement for Newer `pasta` Features
 

@@ -19,10 +19,12 @@ The primary build method is the **Build and Release Podman .deb Packages** workf
 
 The workflow builds all supported platform/architecture combinations in parallel (currently 8 jobs).
 
-On success, one **pre-release** per supported distro codename is created automatically:
+The run starts by creating a single **draft** GitHub release. All 8 matrix jobs build in parallel; when every build succeeds, their `.deb` files (all distros, both architectures) plus a combined `SHA256SUMS` are uploaded to that one release, which is then flipped from draft to a published **pre-release**:
 
-- `v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` — `.deb` files for both architectures + `SHA256SUMS`
+- `v<VERSION>-<YYYYMMDD>-<N>` — `.deb` files for all distros and both architectures + `SHA256SUMS`
   - `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...)
+  - Each `.deb` filename carries its distro codename (e.g. `~noble`, `~trixie`), so all distros coexist in the one release without collision.
+  - If any build job fails, the release stays a draft and is not published.
 
 ## Local Builds
 
@@ -152,9 +154,9 @@ Both methods require network access to:
 
 ## Releases
 
-GitHub Actions creates one pre-release per supported distro codename per workflow run, each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+GitHub Actions creates a single pre-release per workflow run containing every supported distro's `.deb` files (both architectures) plus a combined SHA256SUMS file. The run opens the release as a draft, builds all distros in parallel, and only publishes (flips draft → pre-release) once all builds succeed. No manual upload is needed.
 
-Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v5.8.2-noble-20260415-1`).
+Release tag format: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v5.8.2-20260415-1`).
 
 Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `5.8.2+20260415-1~trixie`).
 

@@ -1,16 +1,34 @@
 # Podman Package Builders
 
-Build Podman, netavark, and aardvark-dns `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman, netavark, aardvark-dns, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
-netavark (Rust network stack) and aardvark-dns (Rust DNS server) are both
-required by Podman 6.0. This repo builds all three products with the same
-pattern (distro `debian/` packaging + pinned upstream source + repo-managed
-patches + a self-installed toolchain).
+netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
+(config files), and containers-storage (storage CLI + `storage.conf`) are
+**required companions of Podman 6.0** — Podman 6 will not provide container
+networking or name resolution without netavark/aardvark-dns, and needs config
+matching its release. They are shipped here as extra packages **built and
+released for all targets** (the distro repositories do not provide versions new
+enough for Podman 6). Install them together on each target. Podman, the two Rust
+components, and containers-storage follow the same pattern (distro `debian/`
+packaging + pinned upstream source + repo-managed patches + a self-installed
+toolchain); containers-common is `Architecture: all` and needs no compilation
+(config files + man pages only).
+
+> **Why containers-storage matters:** Podman 6.0's storage library (v1.63.0)
+> honors an explicitly-set `graphroot` even for rootless users (it no longer
+> remaps it to `$HOME`). The distros' older `containers-storage` ships a
+> `/usr/share/containers/storage.conf` with `graphroot` hardcoded to
+> `/var/lib/containers/storage`, so rootless Podman 6.0 hits a root-owned path →
+> *permission denied*. The v1.63.0 `storage.conf` built here leaves
+> `graphroot`/`runroot` commented out, so rootless Podman falls back to its
+> per-user default.
 
 ## Supported Platforms
 
-All supported platforms build for both architectures: `amd64` and `arm64`.
-Podman, netavark, and aardvark-dns are all built for all three.
+All compiled packages build for both architectures: `amd64` and `arm64`.
+containers-common is `Architecture: all` (one build per distro). Every product
+is built for all three targets — and on each target Podman 6.0 needs the
+matching netavark, aardvark-dns, and containers-common installed alongside it.
 
 | Platform | Codename |
 |----------|----------|
@@ -48,6 +66,16 @@ Zero-argument scripts for building locally with Docker Buildx:
 ./scripts/build-aardvark-dns-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
 ./scripts/build-aardvark-dns-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
 ./scripts/build-aardvark-dns-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# containers-common (config files; Architecture: all)
+./scripts/build-containers-common-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-containers-common-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-containers-common-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# containers-storage (CLI + storage.conf)
+./scripts/build-containers-storage-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-containers-storage-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-containers-storage-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
 ## Script Layout
@@ -129,6 +157,16 @@ RUST_VERSION=1.88.0
 AARDVARK_TAG=v2.0.0
 AARDVARK_UPSTREAM_SHA256=d3f5d6b3be3c2d80e8257fb9467e34ff104f299474427979454034dca6dc88cc
 AARDVARK_VENDOR_SHA256=c5ca49d98c535fa3c8d0d195512faf1f8610ad9ca4f62bec73c7bbfc4ddcc0b6
+
+# containers-common (config files; Architecture: all) — from the container-libs monorepo
+CONTAINERS_COMMON_TAG=common/v0.68.0
+CONTAINERS_COMMON_VERSION=0.68.0
+CONTAINERS_COMMON_ARCHIVE_SHA256=61391b67e58ecffe4aae8ed620f35c57098b612d0b602d640ad541fb24b06908
+
+# containers-storage (CLI + storage.conf) — from the container-libs monorepo (Go is derived from go.mod)
+CONTAINERS_STORAGE_TAG=storage/v1.63.0
+CONTAINERS_STORAGE_VERSION=1.63.0
+CONTAINERS_STORAGE_ARCHIVE_SHA256=3a0f119a5abb11ff45e49793243278075c5ab5c409dd93ef5106aa443b410fc7
 ```
 
 Notes:
@@ -155,6 +193,20 @@ Notes:
   - `AARDVARK_VENDOR_SHA256` matches the release vendored-deps tarball
     (`.../aardvark-dns/releases/download/v<VERSION>/aardvark-dns-v<VERSION>-vendor.tar.gz`).
   - aardvark-dns ships a single binary (no systemd units, no man page).
+- containers-common is built from the `containers/container-libs` monorepo (the
+  `common/` subdir), tagged `common/v<VERSION>`. It produces an
+  `Architecture: all` package (config files + man pages; no Go compilation), so
+  only the archive checksum is pinned:
+  - `CONTAINERS_COMMON_TAG` is the monorepo tag, e.g. `common/v0.68.0`.
+  - `CONTAINERS_COMMON_ARCHIVE_SHA256` matches the GitHub container-libs tag archive
+    (`.../container-libs/archive/refs/tags/common/v<VERSION>.tar.gz`).
+- containers-storage is built from the same monorepo (the `storage/` subdir),
+  tagged `storage/v<VERSION>`. It is a CGO Go build (the Go toolchain version is
+  derived from upstream `go.mod`, like Podman), producing the arch-dependent
+  `containers-storage` CLI plus the corrected `storage.conf`:
+  - `CONTAINERS_STORAGE_TAG` is the monorepo tag, e.g. `storage/v1.63.0`.
+  - `CONTAINERS_STORAGE_ARCHIVE_SHA256` matches the GitHub container-libs tag archive
+    (`.../container-libs/archive/refs/tags/storage/v<VERSION>.tar.gz`).
 
 ## Output Layout Example
 
@@ -193,17 +245,21 @@ Both methods require network access to:
 
 ## Releases
 
-There are three workflows, each triggered manually (`workflow_dispatch`):
+There are five workflows, each triggered manually (`workflow_dispatch`):
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
 - **Build and Release netavark .deb Packages** — `.github/workflows/build-and-release-netavark.yml`
 - **Build and Release aardvark-dns .deb Packages** — `.github/workflows/build-and-release-aardvark-dns.yml`
+- **Build and Release containers-common .deb Packages** — `.github/workflows/build-and-release-containers-common.yml`
+- **Build and Release containers-storage .deb Packages** — `.github/workflows/build-and-release-containers-storage.yml`
 
-Each creates one pre-release per supported distro codename per workflow run, containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+Each creates one pre-release per supported distro codename per workflow run, containing the `.deb` file(s) and a SHA256SUMS file. The Podman/netavark/aardvark-dns/containers-storage releases carry both architectures; containers-common carries the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Release tag formats:
 - Podman: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
 - netavark: `netavark-v<NETAVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `netavark-v2.0.0-noble-20260415-1`).
 - aardvark-dns: `aardvark-dns-v<AARDVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `aardvark-dns-v2.0.0-noble-20260415-1`).
+- containers-common: `containers-common-v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `containers-common-v0.68.0-noble-20260415-1`).
+- containers-storage: `containers-storage-v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `containers-storage-v1.63.0-noble-20260415-1`).
 
 Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
 

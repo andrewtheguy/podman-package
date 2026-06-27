@@ -95,8 +95,42 @@ load_versions_config() {
         --build-arg "RUST_VERSION=${rust}"
       )
       ;;
+    containers-common)
+      local tag="${CONTAINERS_COMMON_TAG:-}"
+      local version="${CONTAINERS_COMMON_VERSION:-}"
+      local archive_sha="${CONTAINERS_COMMON_ARCHIVE_SHA256:-}"
+      [[ "${tag}" =~ ^common/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONTAINERS_COMMON_TAG in ${VERSION_CONFIG}: ${tag:-<empty>}"
+      [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONTAINERS_COMMON_VERSION in ${VERSION_CONFIG}: ${version:-<empty>}"
+      [[ "${archive_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing CONTAINERS_COMMON_ARCHIVE_SHA256 in ${VERSION_CONFIG}: ${archive_sha:-<empty>}"
+      RESOLVED_TAG="${tag}"
+      PRODUCT_BUILD_ARGS=(
+        --build-arg "CONTAINERS_COMMON_TAG=${tag}"
+        --build-arg "CONTAINERS_COMMON_VERSION=${version}"
+        --build-arg "CONTAINERS_COMMON_ARCHIVE_SHA256=${archive_sha}"
+      )
+      ;;
+    containers-storage)
+      local tag="${CONTAINERS_STORAGE_TAG:-}"
+      local version="${CONTAINERS_STORAGE_VERSION:-}"
+      local archive_sha="${CONTAINERS_STORAGE_ARCHIVE_SHA256:-}"
+      [[ "${tag}" =~ ^storage/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONTAINERS_STORAGE_TAG in ${VERSION_CONFIG}: ${tag:-<empty>}"
+      [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONTAINERS_STORAGE_VERSION in ${VERSION_CONFIG}: ${version:-<empty>}"
+      [[ "${archive_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing CONTAINERS_STORAGE_ARCHIVE_SHA256 in ${VERSION_CONFIG}: ${archive_sha:-<empty>}"
+      RESOLVED_TAG="${tag}"
+      PRODUCT_BUILD_ARGS=(
+        --build-arg "CONTAINERS_STORAGE_TAG=${tag}"
+        --build-arg "CONTAINERS_STORAGE_VERSION=${version}"
+        --build-arg "CONTAINERS_STORAGE_ARCHIVE_SHA256=${archive_sha}"
+      )
+      ;;
     *)
-      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', or 'aardvark-dns')"
+      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', 'aardvark-dns', 'containers-common', or 'containers-storage')"
       ;;
   esac
 }

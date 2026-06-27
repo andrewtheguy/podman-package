@@ -18,7 +18,6 @@ jobs:
       noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
       trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
       resolute_release_tag: ${{ steps.tags.outputs.resolute_release_tag }}
-      bookworm_release_tag: ${{ steps.tags.outputs.bookworm_release_tag }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -40,7 +39,7 @@ jobs:
           # Find the greatest existing revision across all distros so all
           # releases from this run share the same numeric revision.
           MAX_REVISION=0
-          for DISTRO in noble trixie resolute bookworm; do
+          for DISTRO in noble trixie resolute; do
             DISTRO_MAX=0
             # Legacy tags without explicit revision are treated as revision 1.
             if gh release view "${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
@@ -62,7 +61,7 @@ jobs:
           RELEASE_REVISION=$((MAX_REVISION + 1))
           echo "release_revision=${RELEASE_REVISION}" >> "$GITHUB_OUTPUT"
 
-          for DISTRO in noble trixie resolute bookworm; do
+          for DISTRO in noble trixie resolute; do
             TAG="${PODMAN_TAG}-${DISTRO}-${BUILD_VERSION}-${RELEASE_REVISION}"
             echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "Resolved ${DISTRO} release tag: ${TAG}"
@@ -98,14 +97,6 @@ jobs:
             arch: arm64
             runner: ubuntu-24.04-arm
             dockerfile: docker/Dockerfile.ubuntu-resolute
-          - distro: bookworm
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.debian-bookworm
-          - distro: bookworm
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.debian-bookworm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -275,52 +266,6 @@ jobs:
             --title "Podman ${PODMAN_VERSION} for Ubuntu 26.04 (resolute) - ${RELEASE_VERSION}" \
             --notes "$(cat <<EOF
           ## Podman ${PODMAN_VERSION} .deb packages for Ubuntu 26.04 (resolute)
-
-          Build date: ${BUILD_VERSION}
-          Upstream tag: ${PODMAN_TAG}
-
-          ### SHA256 Checksums
-          \`\`\`
-          $(cat debs/SHA256SUMS)
-          \`\`\`
-          EOF
-          )" \
-            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
-
-  release-bookworm:
-    needs: [prepare, build]
-    runs-on: ubuntu-24.04
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: debs-bookworm-amd64
-          path: debs/amd64
-      - uses: actions/download-artifact@v4
-        with:
-          name: debs-bookworm-arm64
-          path: debs/arm64
-      - name: Generate checksums
-        run: |
-          cd debs
-          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
-          echo "--- SHA256SUMS ---"
-          cat SHA256SUMS
-      - name: Create bookworm release
-        run: |
-          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
-          PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
-          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
-          RELEASE_TAG="${{ needs.prepare.outputs.bookworm_release_tag }}"
-          RELEASE_VERSION="${RELEASE_TAG#${PODMAN_TAG}-bookworm-}"
-
-          gh release create "${RELEASE_TAG}" \
-            --repo "${{ github.repository }}" \
-            --prerelease \
-            --title "Podman ${PODMAN_VERSION} for Debian 12 (bookworm) - ${RELEASE_VERSION}" \
-            --notes "$(cat <<EOF
-          ## Podman ${PODMAN_VERSION} .deb packages for Debian 12 (bookworm)
 
           Build date: ${BUILD_VERSION}
           Upstream tag: ${PODMAN_TAG}

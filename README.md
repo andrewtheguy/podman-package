@@ -10,14 +10,13 @@ All supported platforms build for both architectures: `amd64` and `arm64`.
 |----------|----------|
 | Ubuntu 24.04 | `noble` |
 | Ubuntu 26.04 | `resolute` |
-| Debian 12 | `bookworm` |
 | Debian 13 | `trixie` |
 
 ## GitHub Actions (Default)
 
 The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
 
-The workflow builds all supported platform/architecture combinations in parallel (currently 8 jobs).
+The workflow builds all supported platform/architecture combinations in parallel (currently 6 jobs).
 
 On success, one **pre-release** per supported distro codename is created automatically:
 
@@ -31,7 +30,6 @@ Zero-argument scripts for building locally with Docker Buildx:
 ```bash
 ./scripts/build-podman-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
 ./scripts/build-podman-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-podman-deb-debian-bookworm.sh   # Debian 12 (bookworm)
 ./scripts/build-podman-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
@@ -77,7 +75,7 @@ Per-architecture run behavior:
 - Injects distro packaging (`debian/`) into upstream Podman source.
 - Applies repository-managed patch series only (no runtime fallback).
 - Forces deterministic container build flags:
-  - `DEB_BUILD_OPTIONS=nocheck`
+  - `DEB_BUILD_OPTIONS="nocheck noautodbgsym"`
   - `GOTELEMETRY=off`
 - Writes `SHA256SUMS` in each arch directory.
 - Writes `manifest.txt` at `output/<distro>/<YYYYMMDD>/manifest.txt`.
@@ -100,8 +98,8 @@ Pinned upstream input config:
 - `packaging/versions.env`
 
 ```bash
-PODMAN_TAG=v5.x.x
-UPSTREAM_SHA256=....
+PODMAN_TAG=v6.0.0
+UPSTREAM_SHA256=f35ac7c40f0fd01bfedfe627c23ff7a577b071d50f2b0726e4734d51810f5a7d
 ```
 
 Notes:
@@ -154,9 +152,9 @@ Both methods require network access to:
 
 GitHub Actions creates one pre-release per supported distro codename per workflow run, each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
-Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v5.8.2-noble-20260415-1`).
+Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
 
-Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `5.8.2+20260415-1~trixie`).
+Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie`).
 
 ## Runtime Requirement for Newer `pasta` Features
 

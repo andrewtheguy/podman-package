@@ -179,6 +179,25 @@ override_dh_golang:
 	true
 EOF
   fi
+
+  # Distro packaging is GOPATH-based and still assumes the pre-v6 import path.
+  # Build modern Podman with upstream module-aware Makefile targets instead.
+  cat >> debian/rules <<'EOF_MODULE_BUILD'
+
+override_dh_auto_configure:
+	mkdir -p _output
+
+override_dh_auto_build:
+	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=/usr/bin/go-md2man podman podman-remote podman-testing rootlessport quadlet docs docker-docs
+
+override_dh_auto_install:
+	install -D -m 0755 bin/podman debian/tmp/usr/bin/podman
+	install -D -m 0755 bin/podman-remote debian/tmp/usr/bin/podman-remote
+	install -D -m 0755 bin/podman-testing debian/tmp/usr/bin/podman-testing
+	install -D -m 0755 bin/rootlessport debian/tmp/usr/bin/rootlessport
+	install -D -m 0755 bin/quadlet debian/tmp/usr/bin/quadlet
+	$(MAKE) DESTDIR=debian/tmp PREFIX=/usr LIBDIR=/usr/lib GOMD2MAN=/usr/bin/go-md2man install.systemd install.docker-full install.man
+EOF_MODULE_BUILD
 }
 
 patch_debian_packaging() {
@@ -238,9 +257,9 @@ build_package() {
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).
   # Keep behavior deterministic by always skipping build-time tests.
-  export DEB_BUILD_OPTIONS="nocheck"
+  export DEB_BUILD_OPTIONS="nocheck noautodbgsym"
   export GOTELEMETRY="off"
-  # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
+  # Modern Podman Makefiles require RELEASE_VERSION even for clean.
   export RELEASE_VERSION="${PODMAN_TAG}"
 
   mkdir -p "${OUT_DIR}"

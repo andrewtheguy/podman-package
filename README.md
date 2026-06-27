@@ -15,10 +15,11 @@ The workflow builds all 4 combinations in parallel on native GitHub runners:
 | Debian 13 (trixie) | amd64 | `ubuntu-24.04` |
 | Debian 13 (trixie) | arm64 | `ubuntu-24.04-arm` |
 
-On success, two **pre-releases** are created automatically:
+A single **pre-release** is created automatically. The workflow opens it as a
+draft first, builds all distro/arch combinations in parallel, and only marks
+the release as published once every build succeeds:
 
-- `v<VERSION>-noble-<YYYYMMDD>` — Ubuntu 24.04 `.deb` files (amd64 + arm64) + SHA256SUMS
-- `v<VERSION>-trixie-<YYYYMMDD>` — Debian 13 `.deb` files (amd64 + arm64) + SHA256SUMS
+- `v<VERSION>-<YYYYMMDD>` — Ubuntu 24.04 (noble) and Debian 13 (trixie) `.deb` files (amd64 + arm64) + SHA256SUMS
 
 ## Local Builds
 
@@ -178,9 +179,9 @@ Both methods require network access to:
 
 ## Releases
 
-GitHub Actions creates two separate pre-releases per workflow run (one per distro), each containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
+GitHub Actions creates a single pre-release per workflow run containing every distro/arch `.deb` file plus a combined SHA256SUMS file. The release starts as a draft and is published only after all parallel builds succeed. No manual upload is needed.
 
-Release tag format: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>` (e.g., `v5.8.2-noble-20260415`).
+Release tag format: `v<PODMAN_VERSION>-<YYYYMMDD>` (e.g., `v5.8.4-20260415`).
 
 ## Upload `.deb` Assets To GitHub Release (Local)
 

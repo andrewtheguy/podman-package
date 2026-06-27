@@ -1,0 +1,293 @@
+name: Build and Release aardvark-dns .deb Packages
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      build_version: ${{ steps.vars.outputs.build_version }}
+      aardvark_tag: ${{ steps.vars.outputs.aardvark_tag }}
+      aardvark_version: ${{ steps.vars.outputs.aardvark_version }}
+      aardvark_upstream_sha256: ${{ steps.vars.outputs.aardvark_upstream_sha256 }}
+      aardvark_vendor_sha256: ${{ steps.vars.outputs.aardvark_vendor_sha256 }}
+      rust_version: ${{ steps.vars.outputs.rust_version }}
+      release_revision: ${{ steps.tags.outputs.release_revision }}
+      noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
+      trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
+      resolute_release_tag: ${{ steps.tags.outputs.resolute_release_tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute shared build variables
+        id: vars
+        run: |
+          source packaging/versions.env
+          echo "build_version=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "aardvark_tag=${AARDVARK_TAG}" >> "$GITHUB_OUTPUT"
+          echo "aardvark_version=${AARDVARK_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "aardvark_upstream_sha256=${AARDVARK_UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
+          echo "aardvark_vendor_sha256=${AARDVARK_VENDOR_SHA256}" >> "$GITHUB_OUTPUT"
+          echo "rust_version=${RUST_VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Resolve release tags
+        id: tags
+        run: |
+          AARDVARK_TAG="${{ steps.vars.outputs.aardvark_tag }}"
+          BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
+
+          # Find the greatest existing revision across all distros so all
+          # releases from this run share the same numeric revision.
+          MAX_REVISION=0
+          for DISTRO in noble trixie resolute; do
+            DISTRO_MAX=0
+            # Legacy tags without explicit revision are treated as revision 1.
+            if gh release view "aardvark-dns-${AARDVARK_TAG}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              DISTRO_MAX=1
+            fi
+
+            # Check explicit revisioned tags (...-<revision>)
+            REVISION=1
+            while gh release view "aardvark-dns-${AARDVARK_TAG}-${DISTRO}-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              DISTRO_MAX="${REVISION}"
+              REVISION=$((REVISION + 1))
+            done
+
+            if [[ "${DISTRO_MAX}" -gt "${MAX_REVISION}" ]]; then
+              MAX_REVISION="${DISTRO_MAX}"
+            fi
+          done
+
+          RELEASE_REVISION=$((MAX_REVISION + 1))
+          echo "release_revision=${RELEASE_REVISION}" >> "$GITHUB_OUTPUT"
+
+          for DISTRO in noble trixie resolute; do
+            TAG="aardvark-dns-${AARDVARK_TAG}-${DISTRO}-${BUILD_VERSION}-${RELEASE_REVISION}"
+            echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Resolved ${DISTRO} release tag: ${TAG}"
+          done
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: noble
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-noble
+          - distro: noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-noble
+          - distro: trixie
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.aardvark-dns-debian-trixie
+          - distro: trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.aardvark-dns-debian-trixie
+          - distro: resolute
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-resolute
+          - distro: resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-resolute
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build .deb packages
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
+          AARDVARK_TAG: ${{ needs.prepare.outputs.aardvark_tag }}
+          AARDVARK_UPSTREAM_SHA256: ${{ needs.prepare.outputs.aardvark_upstream_sha256 }}
+          AARDVARK_VENDOR_SHA256: ${{ needs.prepare.outputs.aardvark_vendor_sha256 }}
+          RUST_VERSION: ${{ needs.prepare.outputs.rust_version }}
+        run: |
+          docker build \
+            --pull \
+            --no-cache \
+            --build-arg "DISTRO=${{ matrix.distro }}" \
+            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
+            --build-arg "AARDVARK_TAG=${AARDVARK_TAG}" \
+            --build-arg "AARDVARK_UPSTREAM_SHA256=${AARDVARK_UPSTREAM_SHA256}" \
+            --build-arg "AARDVARK_VENDOR_SHA256=${AARDVARK_VENDOR_SHA256}" \
+            --build-arg "RUST_VERSION=${RUST_VERSION}" \
+            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
+            --target artifact-export \
+            --output "type=local,dest=output" \
+            --file "${{ matrix.dockerfile }}" \
+            .
+      - name: List built artifacts
+        run: find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aardvark-dns-debs-${{ matrix.distro }}-${{ matrix.arch }}
+          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aardvark-dns-metadata-${{ matrix.distro }}-${{ matrix.arch }}
+          path: |
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  release-noble:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-noble-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-noble-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create noble release
+        run: |
+          AARDVARK_TAG="${{ needs.prepare.outputs.aardvark_tag }}"
+          AARDVARK_VERSION="${{ needs.prepare.outputs.aardvark_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.noble_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#aardvark-dns-${AARDVARK_TAG}-noble-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "aardvark-dns ${AARDVARK_VERSION} for Ubuntu 24.04 (noble) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## aardvark-dns ${AARDVARK_VERSION} .deb packages for Ubuntu 24.04 (noble)
+
+          DNS server for Podman 6.0 / netavark.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${AARDVARK_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-trixie:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-trixie-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-trixie-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create trixie release
+        run: |
+          AARDVARK_TAG="${{ needs.prepare.outputs.aardvark_tag }}"
+          AARDVARK_VERSION="${{ needs.prepare.outputs.aardvark_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.trixie_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#aardvark-dns-${AARDVARK_TAG}-trixie-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "aardvark-dns ${AARDVARK_VERSION} for Debian 13 (trixie) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## aardvark-dns ${AARDVARK_VERSION} .deb packages for Debian 13 (trixie)
+
+          DNS server for Podman 6.0 / netavark.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${AARDVARK_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-resolute:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-resolute-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: aardvark-dns-debs-resolute-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+      - name: Create resolute release
+        run: |
+          AARDVARK_TAG="${{ needs.prepare.outputs.aardvark_tag }}"
+          AARDVARK_VERSION="${{ needs.prepare.outputs.aardvark_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.resolute_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#aardvark-dns-${AARDVARK_TAG}-resolute-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "aardvark-dns ${AARDVARK_VERSION} for Ubuntu 26.04 (resolute) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## aardvark-dns ${AARDVARK_VERSION} .deb packages for Ubuntu 26.04 (resolute)
+
+          DNS server for Podman 6.0 / netavark.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${AARDVARK_TAG}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS

@@ -1,15 +1,16 @@
 # Podman Package Builders
 
-Build Podman and netavark `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman, netavark, and aardvark-dns `.deb` packages in Docker for isolated, deterministic builds.
 
-netavark is the Rust network stack required by Podman 6.0; this repo builds both
-products with the same pattern (distro `debian/` packaging + pinned upstream
-source + repo-managed patches + a self-installed toolchain).
+netavark (Rust network stack) and aardvark-dns (Rust DNS server) are both
+required by Podman 6.0. This repo builds all three products with the same
+pattern (distro `debian/` packaging + pinned upstream source + repo-managed
+patches + a self-installed toolchain).
 
 ## Supported Platforms
 
 All supported platforms build for both architectures: `amd64` and `arm64`.
-Both Podman and netavark are built for all three.
+Podman, netavark, and aardvark-dns are all built for all three.
 
 | Platform | Codename |
 |----------|----------|
@@ -42,6 +43,11 @@ Zero-argument scripts for building locally with Docker Buildx:
 ./scripts/build-netavark-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
 ./scripts/build-netavark-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
 ./scripts/build-netavark-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# aardvark-dns
+./scripts/build-aardvark-dns-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-aardvark-dns-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-aardvark-dns-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
 ## Script Layout
@@ -118,6 +124,11 @@ NETAVARK_TAG=v2.0.0
 NETAVARK_UPSTREAM_SHA256=031aeeacc930382e8635d40a885798eff1da164dfcf9024b698f822e5995d9c8
 NETAVARK_VENDOR_SHA256=86de7eb3a4e9ecc4acd5addc462879e8f2bac3562a4b99f12a4be67e5218c2cb
 RUST_VERSION=1.88.0
+
+# aardvark-dns (Rust) — reuses RUST_VERSION above
+AARDVARK_TAG=v2.0.0
+AARDVARK_UPSTREAM_SHA256=d3f5d6b3be3c2d80e8257fb9467e34ff104f299474427979454034dca6dc88cc
+AARDVARK_VENDOR_SHA256=c5ca49d98c535fa3c8d0d195512faf1f8610ad9ca4f62bec73c7bbfc4ddcc0b6
 ```
 
 Notes:
@@ -138,6 +149,12 @@ Notes:
     used for an offline, deterministic cargo build.
   - `RUST_VERSION` pins the Rust toolchain installed in-container (must be >= netavark's MSRV);
     it is downloaded and checksum-verified from `static.rust-lang.org`.
+- aardvark-dns mirrors netavark and reuses the same `RUST_VERSION`. Both checksums are required:
+  - `AARDVARK_UPSTREAM_SHA256` matches the GitHub source archive
+    (`.../aardvark-dns/archive/refs/tags/v<VERSION>.tar.gz`).
+  - `AARDVARK_VENDOR_SHA256` matches the release vendored-deps tarball
+    (`.../aardvark-dns/releases/download/v<VERSION>/aardvark-dns-v<VERSION>-vendor.tar.gz`).
+  - aardvark-dns ships a single binary (no systemd units, no man page).
 
 ## Output Layout Example
 
@@ -176,15 +193,17 @@ Both methods require network access to:
 
 ## Releases
 
-There are two workflows, each triggered manually (`workflow_dispatch`):
+There are three workflows, each triggered manually (`workflow_dispatch`):
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
 - **Build and Release netavark .deb Packages** — `.github/workflows/build-and-release-netavark.yml`
+- **Build and Release aardvark-dns .deb Packages** — `.github/workflows/build-and-release-aardvark-dns.yml`
 
 Each creates one pre-release per supported distro codename per workflow run, containing both architecture `.deb` files and a SHA256SUMS file. No manual upload is needed.
 
 Release tag formats:
 - Podman: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
 - netavark: `netavark-v<NETAVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `netavark-v2.0.0-noble-20260415-1`).
+- aardvark-dns: `aardvark-dns-v<AARDVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `aardvark-dns-v2.0.0-noble-20260415-1`).
 
 Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
 

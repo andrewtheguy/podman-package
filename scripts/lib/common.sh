@@ -74,8 +74,29 @@ load_versions_config() {
         --build-arg "RUST_VERSION=${rust}"
       )
       ;;
+    aardvark-dns)
+      local tag="${AARDVARK_TAG:-}"
+      local upstream_sha="${AARDVARK_UPSTREAM_SHA256:-}"
+      local vendor_sha="${AARDVARK_VENDOR_SHA256:-}"
+      local rust="${RUST_VERSION:-}"
+      [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || \
+        die "invalid or missing AARDVARK_TAG in ${VERSION_CONFIG}: ${tag:-<empty>}"
+      [[ "${upstream_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing AARDVARK_UPSTREAM_SHA256 in ${VERSION_CONFIG}: ${upstream_sha:-<empty>}"
+      [[ "${vendor_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing AARDVARK_VENDOR_SHA256 in ${VERSION_CONFIG}: ${vendor_sha:-<empty>}"
+      [[ "${rust}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing RUST_VERSION in ${VERSION_CONFIG}: ${rust:-<empty>}"
+      RESOLVED_TAG="${tag}"
+      PRODUCT_BUILD_ARGS=(
+        --build-arg "AARDVARK_TAG=${tag}"
+        --build-arg "AARDVARK_UPSTREAM_SHA256=${upstream_sha}"
+        --build-arg "AARDVARK_VENDOR_SHA256=${vendor_sha}"
+        --build-arg "RUST_VERSION=${rust}"
+      )
+      ;;
     *)
-      die "unknown PRODUCT: ${PRODUCT} (expected 'podman' or 'netavark')"
+      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', or 'aardvark-dns')"
       ;;
   esac
 }

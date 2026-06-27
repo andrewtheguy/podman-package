@@ -23,6 +23,12 @@ toolchain); containers-common is `Architecture: all` and needs no compilation
 > `graphroot`/`runroot` commented out, so rootless Podman falls back to its
 > per-user default.
 
+The podman package built here declares versioned dependencies on these
+companions, so installing podman pulls the matching set:
+`Depends: … netavark (>= 2.0.0), aardvark-dns (>= 2.0.0), golang-github-containers-common (>= 0.68.0), containers-storage (>= 1.63.0)`.
+The older distro versions do not satisfy these, so install the repo's `.deb`s
+together (e.g. `apt install ./*.deb`).
+
 ## Supported Platforms
 
 All compiled packages build for both architectures: `amd64` and `arm64`.

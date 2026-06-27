@@ -219,6 +219,32 @@ patch_debian_packaging() {
     ".config/go/telemetry/*"; do
     grep -qxF "${entry}" "${not_installed_file}" || echo "${entry}" >> "${not_installed_file}"
   done
+
+  patch_control_dependencies
+}
+
+# Podman 6.0 requires matching companion packages built by this repo. Rewrite the
+# podman binary package's Depends so it pulls our versioned netavark, aardvark-dns,
+# containers-common, and containers-storage (the latter ships the rootless-correct
+# storage.conf). Existing (often unversioned) entries for these are replaced.
+patch_control_dependencies() {
+  cd "${UPSTREAM_SRC_DIR}"
+  [[ -f debian/control ]] || die "debian/control not found while patching podman dependencies"
+
+  perl -i -00 -pe '
+    next unless /^Package:[ \t]*podman[ \t]*$/m;
+    s{^Depends:(.*?)(?=^\S|\z)}{
+      my $val=$1; $val =~ s/\s+/ /g;
+      my %drop = map { $_=>1 } qw(netavark aardvark-dns golang-github-containers-common containers-storage);
+      my @toks = grep { length } map { my $t=$_; $t =~ s/^\s+//; $t =~ s/\s+$//; $t } split /,/, $val;
+      @toks = grep { my ($n)=/^(\S+)/; !$drop{$n} } @toks;
+      push @toks, "netavark (>= 2.0.0)", "aardvark-dns (>= 2.0.0)", "golang-github-containers-common (>= 0.68.0)", "containers-storage (>= 1.63.0)";
+      "Depends: " . join(",\n ", @toks) . "\n"
+    }mse;
+  ' debian/control
+
+  grep -qE "containers-storage \(>= 1\.63\.0\)" debian/control || \
+    die "failed to inject companion dependencies into podman debian/control"
 }
 
 update_changelog() {

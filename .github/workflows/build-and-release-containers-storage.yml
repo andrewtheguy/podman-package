@@ -1,0 +1,278 @@
+name: Build and Release containers-storage .deb Packages
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      build_version: ${{ steps.vars.outputs.build_version }}
+      cs_tag: ${{ steps.vars.outputs.cs_tag }}
+      cs_version: ${{ steps.vars.outputs.cs_version }}
+      cs_archive_sha256: ${{ steps.vars.outputs.cs_archive_sha256 }}
+      release_revision: ${{ steps.tags.outputs.release_revision }}
+      noble_release_tag: ${{ steps.tags.outputs.noble_release_tag }}
+      trixie_release_tag: ${{ steps.tags.outputs.trixie_release_tag }}
+      resolute_release_tag: ${{ steps.tags.outputs.resolute_release_tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute shared build variables
+        id: vars
+        run: |
+          source packaging/versions.env
+          echo "build_version=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "cs_tag=${CONTAINERS_STORAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "cs_version=${CONTAINERS_STORAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "cs_archive_sha256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Resolve release tags
+        id: tags
+        run: |
+          CS_VERSION="${{ steps.vars.outputs.cs_version }}"
+          BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
+
+          MAX_REVISION=0
+          for DISTRO in noble trixie resolute; do
+            DISTRO_MAX=0
+            if gh release view "containers-storage-v${CS_VERSION}-${DISTRO}-${BUILD_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              DISTRO_MAX=1
+            fi
+            REVISION=1
+            while gh release view "containers-storage-v${CS_VERSION}-${DISTRO}-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+              DISTRO_MAX="${REVISION}"
+              REVISION=$((REVISION + 1))
+            done
+            if [[ "${DISTRO_MAX}" -gt "${MAX_REVISION}" ]]; then
+              MAX_REVISION="${DISTRO_MAX}"
+            fi
+          done
+
+          RELEASE_REVISION=$((MAX_REVISION + 1))
+          echo "release_revision=${RELEASE_REVISION}" >> "$GITHUB_OUTPUT"
+
+          for DISTRO in noble trixie resolute; do
+            TAG="containers-storage-v${CS_VERSION}-${DISTRO}-${BUILD_VERSION}-${RELEASE_REVISION}"
+            echo "${DISTRO}_release_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Resolved ${DISTRO} release tag: ${TAG}"
+          done
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: noble
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.containers-storage-ubuntu-noble
+          - distro: noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.containers-storage-ubuntu-noble
+          - distro: trixie
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.containers-storage-debian-trixie
+          - distro: trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.containers-storage-debian-trixie
+          - distro: resolute
+            arch: amd64
+            runner: ubuntu-24.04
+            dockerfile: docker/Dockerfile.containers-storage-ubuntu-resolute
+          - distro: resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: docker/Dockerfile.containers-storage-ubuntu-resolute
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build .deb packages
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
+          CONTAINERS_STORAGE_TAG: ${{ needs.prepare.outputs.cs_tag }}
+          CONTAINERS_STORAGE_VERSION: ${{ needs.prepare.outputs.cs_version }}
+          CONTAINERS_STORAGE_ARCHIVE_SHA256: ${{ needs.prepare.outputs.cs_archive_sha256 }}
+        run: |
+          docker build \
+            --pull \
+            --no-cache \
+            --build-arg "DISTRO=${{ matrix.distro }}" \
+            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
+            --build-arg "CONTAINERS_STORAGE_TAG=${CONTAINERS_STORAGE_TAG}" \
+            --build-arg "CONTAINERS_STORAGE_VERSION=${CONTAINERS_STORAGE_VERSION}" \
+            --build-arg "CONTAINERS_STORAGE_ARCHIVE_SHA256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" \
+            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
+            --target artifact-export \
+            --output "type=local,dest=output" \
+            --file "${{ matrix.dockerfile }}" \
+            .
+      - name: List built artifacts
+        run: find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: containers-storage-debs-${{ matrix.distro }}-${{ matrix.arch }}
+          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: containers-storage-metadata-${{ matrix.distro }}-${{ matrix.arch }}
+          path: |
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
+            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  release-noble:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-noble-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-noble-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create noble release
+        run: |
+          CS_VERSION="${{ needs.prepare.outputs.cs_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.noble_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#containers-storage-v${CS_VERSION}-noble-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "containers-storage ${CS_VERSION} for Ubuntu 24.04 (noble) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## containers-storage ${CS_VERSION} .deb packages for Ubuntu 24.04 (noble)
+
+          containers-storage CLI + storage.conf for Podman 6.0. Its storage.conf leaves
+          graphroot/runroot commented out so rootless Podman uses the per-user default.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${{ needs.prepare.outputs.cs_tag }}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-trixie:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-trixie-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-trixie-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create trixie release
+        run: |
+          CS_VERSION="${{ needs.prepare.outputs.cs_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.trixie_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#containers-storage-v${CS_VERSION}-trixie-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "containers-storage ${CS_VERSION} for Debian 13 (trixie) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## containers-storage ${CS_VERSION} .deb packages for Debian 13 (trixie)
+
+          containers-storage CLI + storage.conf for Podman 6.0. Its storage.conf leaves
+          graphroot/runroot commented out so rootless Podman uses the per-user default.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${{ needs.prepare.outputs.cs_tag }}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS
+
+  release-resolute:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-resolute-amd64
+          path: debs/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: containers-storage-debs-resolute-arm64
+          path: debs/arm64
+      - name: Generate checksums
+        run: |
+          cd debs
+          find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create resolute release
+        run: |
+          CS_VERSION="${{ needs.prepare.outputs.cs_version }}"
+          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
+          RELEASE_TAG="${{ needs.prepare.outputs.resolute_release_tag }}"
+          RELEASE_VERSION="${RELEASE_TAG#containers-storage-v${CS_VERSION}-resolute-}"
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "containers-storage ${CS_VERSION} for Ubuntu 26.04 (resolute) - ${RELEASE_VERSION}" \
+            --notes "$(cat <<EOF
+          ## containers-storage ${CS_VERSION} .deb packages for Ubuntu 26.04 (resolute)
+
+          containers-storage CLI + storage.conf for Podman 6.0. Its storage.conf leaves
+          graphroot/runroot commented out so rootless Podman uses the per-user default.
+
+          Build date: ${BUILD_VERSION}
+          Upstream tag: ${{ needs.prepare.outputs.cs_tag }}
+
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat debs/SHA256SUMS)
+          \`\`\`
+          EOF
+          )" \
+            debs/amd64/*.deb debs/arm64/*.deb debs/SHA256SUMS

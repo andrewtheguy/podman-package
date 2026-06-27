@@ -12,6 +12,7 @@ fi
 : "${TARGET_ARCH:?TARGET_ARCH is required}"
 : "${BUILD_VERSION:?BUILD_VERSION is required}"
 : "${BUILD_REVISION:=1}"
+: "${UPSTREAM_SHA256:?UPSTREAM_SHA256 is required}"
 : "${DISTRO:=trixie}"
 
 [[ "${BUILD_REVISION}" =~ ^[1-9][0-9]*$ ]] || die "BUILD_REVISION must be a positive integer: ${BUILD_REVISION}"
@@ -70,6 +71,15 @@ prepare_sources() {
   local upstream_url="https://github.com/containers/podman/archive/refs/tags/${PODMAN_TAG}.tar.gz"
   log "Downloading upstream Podman source: ${upstream_url}"
   curl -fsSL -o "${upstream_tarball}" -L "${upstream_url}"
+
+  local expected_sha256="${UPSTREAM_SHA256,,}"
+  [[ "${expected_sha256}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "invalid UPSTREAM_SHA256 format: ${UPSTREAM_SHA256}"
+  local actual_sha256
+  actual_sha256="$(sha256sum "${upstream_tarball}" | awk '{print $1}')"
+  [[ "${actual_sha256}" == "${expected_sha256}" ]] || \
+    die "upstream tarball checksum mismatch for ${upstream_tarball}: expected ${expected_sha256}, got ${actual_sha256}"
+
   tar -xzf "${upstream_tarball}" -C "${WORK_ROOT}"
 
   UPSTREAM_SRC_DIR="${WORK_ROOT}/podman-${upstream_version}"
@@ -168,6 +178,25 @@ override_dh_golang:
 	true
 EOF_RULES
   fi
+
+  # Distro packaging is GOPATH-based and still assumes the pre-v6 import path.
+  # Build modern Podman with upstream module-aware Makefile targets instead.
+  cat >> debian/rules <<'EOF_MODULE_BUILD'
+
+override_dh_auto_configure:
+	mkdir -p _output
+
+override_dh_auto_build:
+	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=/usr/bin/go-md2man podman podman-remote podman-testing rootlessport quadlet docs docker-docs
+
+override_dh_auto_install:
+	install -D -m 0755 bin/podman debian/tmp/usr/bin/podman
+	install -D -m 0755 bin/podman-remote debian/tmp/usr/bin/podman-remote
+	install -D -m 0755 bin/podman-testing debian/tmp/usr/bin/podman-testing
+	install -D -m 0755 bin/rootlessport debian/tmp/usr/bin/rootlessport
+	install -D -m 0755 bin/quadlet debian/tmp/usr/bin/quadlet
+	$(MAKE) DESTDIR=debian/tmp PREFIX=/usr LIBDIR=/usr/lib GOMD2MAN=/usr/bin/go-md2man install.systemd install.docker-full install.man
+EOF_MODULE_BUILD
 }
 
 patch_debian_packaging() {
@@ -227,9 +256,9 @@ build_package() {
 
   # Containerized build isolation blocks some upstream tests (e.g. /proc/self/exe re-exec).
   # Keep behavior deterministic by always skipping Debian build-time tests.
-  export DEB_BUILD_OPTIONS="nocheck"
+  export DEB_BUILD_OPTIONS="nocheck noautodbgsym"
   export GOTELEMETRY="off"
-  # Podman v5.8+ Makefile requires RELEASE_VERSION even for clean.
+  # Modern Podman Makefiles require RELEASE_VERSION even for clean.
   export RELEASE_VERSION="${PODMAN_TAG}"
 
   mkdir -p "${OUT_DIR}"

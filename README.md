@@ -44,14 +44,17 @@ matching netavark, aardvark-dns, and containers-common installed alongside it.
 
 ## GitHub Actions (Default)
 
-The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
+Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
-The workflow builds all supported platform/architecture combinations in parallel (currently 6 jobs).
+- **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
+- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, containers-common, and containers-storage (the packages the Podman workflow does not cover).
 
-On success, one **pre-release** per supported distro codename is created automatically:
+Each workflow builds all its platform/architecture combinations in parallel, then publishes a **single unified pre-release** containing every `.deb` from that run plus a combined `SHA256SUMS`:
 
-- `v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` — `.deb` files for both architectures + `SHA256SUMS`
-  - `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...)
+- Podman: `v<VERSION>-<YYYYMMDD>-<N>`
+- Companions: `podman-extras-<YYYYMMDD>-<N>`
+
+`<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...).
 
 ## Local Builds
 
@@ -86,7 +89,7 @@ Zero-argument scripts for building locally with Docker Buildx:
 
 ## Script Layout
 
-- GitHub Actions workflow: `.github/workflows/build-and-release.yml`
+- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman) and `.github/workflows/build-and-release-extras.yml` (companion packages)
 - Host/orchestrator scripts remain under `scripts/`.
 - In-container build scripts are under `scripts/container/`.
 - Shared helpers remain under `scripts/lib/`.
@@ -251,21 +254,15 @@ Both methods require network access to:
 
 ## Releases
 
-There are five workflows, each triggered manually (`workflow_dispatch`):
+There are two workflows, each triggered manually (`workflow_dispatch`):
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
-- **Build and Release netavark .deb Packages** — `.github/workflows/build-and-release-netavark.yml`
-- **Build and Release aardvark-dns .deb Packages** — `.github/workflows/build-and-release-aardvark-dns.yml`
-- **Build and Release containers-common .deb Packages** — `.github/workflows/build-and-release-containers-common.yml`
-- **Build and Release containers-storage .deb Packages** — `.github/workflows/build-and-release-containers-storage.yml`
+- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, containers-common, containers-storage)
 
-Each creates one pre-release per supported distro codename per workflow run, containing the `.deb` file(s) and a SHA256SUMS file. The Podman/netavark/aardvark-dns/containers-storage releases carry both architectures; containers-common carries the single `Architecture: all` `.deb`. No manual upload is needed.
+Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Release tag formats:
-- Podman: `v<PODMAN_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-noble-20260415-1`).
-- netavark: `netavark-v<NETAVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `netavark-v2.0.0-noble-20260415-1`).
-- aardvark-dns: `aardvark-dns-v<AARDVARK_VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `aardvark-dns-v2.0.0-noble-20260415-1`).
-- containers-common: `containers-common-v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `containers-common-v0.68.0-noble-20260415-1`).
-- containers-storage: `containers-storage-v<VERSION>-<DISTRO>-<YYYYMMDD>-<N>` (e.g., `containers-storage-v1.63.0-noble-20260415-1`).
+- Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
+- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, containers-common, and containers-storage `.deb`s for every distro.
 
 Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
 

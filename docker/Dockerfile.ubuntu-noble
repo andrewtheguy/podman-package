@@ -32,7 +32,7 @@ ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
 COPY scripts/container/in-container-build-ubuntu-noble.sh /workspace/scripts/container/in-container-build-ubuntu-noble.sh
-COPY packaging/patches-noble /workspace/packaging/patches-noble
+COPY packaging/patches-ubuntu-noble /workspace/packaging/patches-ubuntu-noble
 
 RUN chmod +x /workspace/scripts/container/in-container-build-ubuntu-noble.sh && \
     DISTRO="${DISTRO}" \

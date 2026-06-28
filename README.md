@@ -1,45 +1,95 @@
 # Podman Package Builders
 
-Build Podman `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman, netavark, aardvark-dns, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
+
+netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
+(config files), and containers-storage (storage CLI + `storage.conf`) are
+**required companions of Podman 6.0** — Podman 6 will not provide container
+networking or name resolution without netavark/aardvark-dns, and needs config
+matching its release. They are shipped here as extra packages **built and
+released for all targets** (the distro repositories do not provide versions new
+enough for Podman 6). Install them together on each target. Podman, the two Rust
+components, and containers-storage follow the same pattern (distro `debian/`
+packaging + pinned upstream source + repo-managed patches + a self-installed
+toolchain); containers-common is `Architecture: all` and needs no compilation
+(config files + man pages only).
+
+> **Why containers-storage matters:** Podman 6.0's storage library (v1.63.0)
+> honors an explicitly-set `graphroot` even for rootless users (it no longer
+> remaps it to `$HOME`). The distros' older `containers-storage` ships a
+> `/usr/share/containers/storage.conf` with `graphroot` hardcoded to
+> `/var/lib/containers/storage`, so rootless Podman 6.0 hits a root-owned path →
+> *permission denied*. The v1.63.0 `storage.conf` built here leaves
+> `graphroot`/`runroot` commented out, so rootless Podman falls back to its
+> per-user default.
+
+The podman package built here declares versioned dependencies on these
+companions, so installing podman pulls the matching set:
+`Depends: … netavark (>= 2.0.0), aardvark-dns (>= 2.0.0), golang-github-containers-common (>= 0.68.0), containers-storage (>= 1.63.0)`.
+The older distro versions do not satisfy these, so install the repo's `.deb`s
+together (e.g. `apt install ./*.deb`).
 
 ## Supported Platforms
 
-All supported platforms build for both architectures: `amd64` and `arm64`.
+All compiled packages build for both architectures: `amd64` and `arm64`.
+containers-common is `Architecture: all` (one build per distro). Every product
+is built for all three targets — and on each target Podman 6.0 needs the
+matching netavark, aardvark-dns, and containers-common installed alongside it.
 
 | Platform | Codename |
 |----------|----------|
 | Ubuntu 24.04 | `noble` |
 | Ubuntu 26.04 | `resolute` |
-| Debian 12 | `bookworm` |
 | Debian 13 | `trixie` |
 
 ## GitHub Actions (Default)
 
-The primary build method is the **Build and Release Podman .deb Packages** workflow, triggered manually from the Actions tab (`workflow_dispatch`).
+Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
-The workflow builds all supported platform/architecture combinations in parallel (currently 8 jobs).
+- **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
+- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, containers-common, and containers-storage (the packages the Podman workflow does not cover).
 
-The run starts by creating a single **draft** GitHub release. All 8 matrix jobs build in parallel; when every build succeeds, their `.deb` files (all distros, both architectures) plus a combined `SHA256SUMS` are uploaded to that one release, which is then flipped from draft to a published **pre-release**:
+Each workflow builds all its platform/architecture combinations in parallel, then publishes a **single unified pre-release** containing every `.deb` from that run plus a combined `SHA256SUMS`:
 
-- `v<VERSION>-<YYYYMMDD>-<N>` — `.deb` files for all distros and both architectures + `SHA256SUMS`
-  - `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...)
-  - Each `.deb` filename carries its distro codename (e.g. `~noble`, `~trixie`), so all distros coexist in the one release without collision.
-  - If any build job fails, the release stays a draft and is not published.
+- Podman: `v<VERSION>-<YYYYMMDD>-<N>`
+- Companions: `podman-extras-<YYYYMMDD>-<N>`
+
+`<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...).
 
 ## Local Builds
 
 Zero-argument scripts for building locally with Docker Buildx:
 
 ```bash
-./scripts/build-podman-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-podman-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-podman-deb-debian-bookworm.sh   # Debian 12 (bookworm)
-./scripts/build-podman-deb-debian-trixie.sh     # Debian 13 (trixie)
+# Podman
+./scripts/build-podman-deb-ubuntu-noble.sh        # Ubuntu 24.04 (noble)
+./scripts/build-podman-deb-ubuntu-resolute.sh     # Ubuntu 26.04 (resolute)
+./scripts/build-podman-deb-debian-trixie.sh       # Debian 13 (trixie)
+
+# netavark
+./scripts/build-netavark-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-netavark-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-netavark-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# aardvark-dns
+./scripts/build-aardvark-dns-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-aardvark-dns-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-aardvark-dns-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# containers-common (config files; Architecture: all)
+./scripts/build-containers-common-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-containers-common-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-containers-common-deb-debian-trixie.sh     # Debian 13 (trixie)
+
+# containers-storage (CLI + storage.conf)
+./scripts/build-containers-storage-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
+./scripts/build-containers-storage-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
+./scripts/build-containers-storage-deb-debian-trixie.sh     # Debian 13 (trixie)
 ```
 
 ## Script Layout
 
-- GitHub Actions workflow: `.github/workflows/build-and-release.yml`
+- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman) and `.github/workflows/build-and-release-extras.yml` (companion packages)
 - Host/orchestrator scripts remain under `scripts/`.
 - In-container build scripts are under `scripts/container/`.
 - Shared helpers remain under `scripts/lib/`.
@@ -79,7 +129,7 @@ Per-architecture run behavior:
 - Injects distro packaging (`debian/`) into upstream Podman source.
 - Applies repository-managed patch series only (no runtime fallback).
 - Forces deterministic container build flags:
-  - `DEB_BUILD_OPTIONS=nocheck`
+  - `DEB_BUILD_OPTIONS="nocheck noautodbgsym"`
   - `GOTELEMETRY=off`
 - Writes `SHA256SUMS` in each arch directory.
 - Writes `manifest.txt` at `output/<distro>/<YYYYMMDD>/manifest.txt`.
@@ -102,20 +152,70 @@ Pinned upstream input config:
 - `packaging/versions.env`
 
 ```bash
-PODMAN_TAG=v5.x.x
-UPSTREAM_SHA256=....
+# Podman (Go)
+PODMAN_TAG=v6.0.0
+UPSTREAM_SHA256=f35ac7c40f0fd01bfedfe627c23ff7a577b071d50f2b0726e4734d51810f5a7d
+
+# netavark (Rust)
+NETAVARK_TAG=v2.0.0
+NETAVARK_UPSTREAM_SHA256=031aeeacc930382e8635d40a885798eff1da164dfcf9024b698f822e5995d9c8
+NETAVARK_VENDOR_SHA256=86de7eb3a4e9ecc4acd5addc462879e8f2bac3562a4b99f12a4be67e5218c2cb
+RUST_VERSION=1.88.0
+
+# aardvark-dns (Rust) — reuses RUST_VERSION above
+AARDVARK_TAG=v2.0.0
+AARDVARK_UPSTREAM_SHA256=d3f5d6b3be3c2d80e8257fb9467e34ff104f299474427979454034dca6dc88cc
+AARDVARK_VENDOR_SHA256=c5ca49d98c535fa3c8d0d195512faf1f8610ad9ca4f62bec73c7bbfc4ddcc0b6
+
+# containers-common (config files; Architecture: all) — from the container-libs monorepo
+CONTAINERS_COMMON_TAG=common/v0.68.0
+CONTAINERS_COMMON_VERSION=0.68.0
+CONTAINERS_COMMON_ARCHIVE_SHA256=61391b67e58ecffe4aae8ed620f35c57098b612d0b602d640ad541fb24b06908
+
+# containers-storage (CLI + storage.conf) — from the container-libs monorepo (Go is derived from go.mod)
+CONTAINERS_STORAGE_TAG=storage/v1.63.0
+CONTAINERS_STORAGE_VERSION=1.63.0
+CONTAINERS_STORAGE_ARCHIVE_SHA256=3a0f119a5abb11ff45e49793243278075c5ab5c409dd93ef5106aa443b410fc7
 ```
 
 Notes:
 - All orchestrators source this file directly.
-- `PODMAN_TAG` controls upstream source tarball selection.
+- `PODMAN_TAG` / `NETAVARK_TAG` control upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
   To obtain the checksum for a given tag, download the tarball from GitHub and compute its SHA256:
   ```bash
   curl -fsSL -L "https://github.com/containers/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
   ```
   Use the hex string from the output as the `UPSTREAM_SHA256` value.
-- Go is not separately pinned; it is read from upstream `go.mod` for the pinned tag.
+- Go is not separately pinned; it is read from upstream `go.mod` for the pinned Podman tag.
+- For netavark, both checksums are required:
+  - `NETAVARK_UPSTREAM_SHA256` matches the GitHub source archive
+    (`.../netavark/archive/refs/tags/v<VERSION>.tar.gz`).
+  - `NETAVARK_VENDOR_SHA256` matches the release vendored-deps tarball
+    (`.../netavark/releases/download/v<VERSION>/netavark-v<VERSION>-vendor.tar.gz`),
+    used for an offline, deterministic cargo build.
+  - `RUST_VERSION` pins the Rust toolchain installed in-container (must be >= netavark's MSRV);
+    it is downloaded and checksum-verified from `static.rust-lang.org`.
+- aardvark-dns mirrors netavark and reuses the same `RUST_VERSION`. Both checksums are required:
+  - `AARDVARK_UPSTREAM_SHA256` matches the GitHub source archive
+    (`.../aardvark-dns/archive/refs/tags/v<VERSION>.tar.gz`).
+  - `AARDVARK_VENDOR_SHA256` matches the release vendored-deps tarball
+    (`.../aardvark-dns/releases/download/v<VERSION>/aardvark-dns-v<VERSION>-vendor.tar.gz`).
+  - aardvark-dns ships a single binary (no systemd units, no man page).
+- containers-common is built from the `containers/container-libs` monorepo (the
+  `common/` subdir), tagged `common/v<VERSION>`. It produces an
+  `Architecture: all` package (config files + man pages; no Go compilation), so
+  only the archive checksum is pinned:
+  - `CONTAINERS_COMMON_TAG` is the monorepo tag, e.g. `common/v0.68.0`.
+  - `CONTAINERS_COMMON_ARCHIVE_SHA256` matches the GitHub container-libs tag archive
+    (`.../container-libs/archive/refs/tags/common/v<VERSION>.tar.gz`).
+- containers-storage is built from the same monorepo (the `storage/` subdir),
+  tagged `storage/v<VERSION>`. It is a CGO Go build (the Go toolchain version is
+  derived from upstream `go.mod`, like Podman), producing the arch-dependent
+  `containers-storage` CLI plus the corrected `storage.conf`:
+  - `CONTAINERS_STORAGE_TAG` is the monorepo tag, e.g. `storage/v1.63.0`.
+  - `CONTAINERS_STORAGE_ARCHIVE_SHA256` matches the GitHub container-libs tag archive
+    (`.../container-libs/archive/refs/tags/storage/v<VERSION>.tar.gz`).
 
 ## Output Layout Example
 
@@ -154,11 +254,17 @@ Both methods require network access to:
 
 ## Releases
 
-GitHub Actions creates a single pre-release per workflow run containing every supported distro's `.deb` files (both architectures) plus a combined SHA256SUMS file. The run opens the release as a draft, builds all distros in parallel, and only publishes (flips draft → pre-release) once all builds succeed. No manual upload is needed.
+There are two workflows, each triggered manually (`workflow_dispatch`):
+- **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
+- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, containers-common, containers-storage)
 
-Release tag format: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v<PODMAN_VERSION>-20260415-1`).
+Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
-Package version format inside generated `.deb` filenames: `<PODMAN_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `<PODMAN_VERSION>+20260415-1~trixie`).
+Release tag formats:
+- Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
+- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, containers-common, and containers-storage `.deb`s for every distro.
+
+Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
 
 ## Runtime Requirement for Newer `pasta` Features
 

@@ -26,22 +26,26 @@ FROM base AS build
 ARG DISTRO=trixie
 ARG BUILD_VERSION
 ARG BUILD_REVISION=1
-ARG PODMAN_TAG
-ARG UPSTREAM_SHA256
+ARG NETAVARK_TAG
+ARG NETAVARK_UPSTREAM_SHA256
+ARG NETAVARK_VENDOR_SHA256
+ARG RUST_VERSION
 ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
-COPY scripts/container/in-container-build-debian-trixie.sh /workspace/scripts/container/in-container-build-debian-trixie.sh
-COPY packaging/patches-debian-trixie /workspace/packaging/patches-debian-trixie
+COPY scripts/container/in-container-build-netavark-debian-trixie.sh /workspace/scripts/container/in-container-build-netavark-debian-trixie.sh
+COPY packaging/patches-netavark-debian-trixie /workspace/packaging/patches-netavark-debian-trixie
 
-RUN chmod +x /workspace/scripts/container/in-container-build-debian-trixie.sh && \
+RUN chmod +x /workspace/scripts/container/in-container-build-netavark-debian-trixie.sh && \
     DISTRO="${DISTRO}" \
     BUILD_VERSION="${BUILD_VERSION}" \
     BUILD_REVISION="${BUILD_REVISION}" \
-    PODMAN_TAG="${PODMAN_TAG}" \
-    UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
+    NETAVARK_TAG="${NETAVARK_TAG}" \
+    NETAVARK_UPSTREAM_SHA256="${NETAVARK_UPSTREAM_SHA256}" \
+    NETAVARK_VENDOR_SHA256="${NETAVARK_VENDOR_SHA256}" \
+    RUST_VERSION="${RUST_VERSION}" \
     TARGET_ARCH="${TARGET_ARCH}" \
-    /workspace/scripts/container/in-container-build-debian-trixie.sh
+    /workspace/scripts/container/in-container-build-netavark-debian-trixie.sh
 
 FROM scratch AS artifact-export
 

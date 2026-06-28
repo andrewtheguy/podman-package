@@ -1,4 +1,4 @@
-FROM debian:trixie AS base
+FROM debian:bookworm AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -23,25 +23,23 @@ WORKDIR /workspace
 
 FROM base AS build
 
-ARG DISTRO=trixie
+ARG DISTRO=bookworm
 ARG BUILD_VERSION
-ARG BUILD_REVISION=1
 ARG PODMAN_TAG
 ARG UPSTREAM_SHA256
 ARG TARGET_ARCH
 
 COPY scripts/lib/common.sh /workspace/scripts/lib/common.sh
-COPY scripts/container/in-container-build-debian-trixie.sh /workspace/scripts/container/in-container-build-debian-trixie.sh
-COPY packaging/patches-debian-trixie /workspace/packaging/patches-debian-trixie
+COPY scripts/container/in-container-build-debian-bookworm.sh /workspace/scripts/container/in-container-build-debian-bookworm.sh
+COPY packaging/patches-bookworm /workspace/packaging/patches-bookworm
 
-RUN chmod +x /workspace/scripts/container/in-container-build-debian-trixie.sh && \
+RUN chmod +x /workspace/scripts/container/in-container-build-debian-bookworm.sh && \
     DISTRO="${DISTRO}" \
     BUILD_VERSION="${BUILD_VERSION}" \
-    BUILD_REVISION="${BUILD_REVISION}" \
     PODMAN_TAG="${PODMAN_TAG}" \
     UPSTREAM_SHA256="${UPSTREAM_SHA256}" \
     TARGET_ARCH="${TARGET_ARCH}" \
-    /workspace/scripts/container/in-container-build-debian-trixie.sh
+    /workspace/scripts/container/in-container-build-debian-bookworm.sh
 
 FROM scratch AS artifact-export
 

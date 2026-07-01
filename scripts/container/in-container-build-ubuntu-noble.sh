@@ -176,7 +176,12 @@ override_dh_auto_configure:
 	mkdir -p _output
 
 override_dh_auto_build:
-	GO111MODULE=on GOPATH= $(MAKE) GOMD2MAN=/usr/bin/go-md2man podman podman-remote podman-testing rootlessport quadlet docs docker-docs
+	# PREFIX/LIBDIR must match override_dh_auto_install. The quadlet binary bakes
+	# podman's path in at link time via -X .../quadlet._binDir=$(BINDIR), and
+	# BINDIR defaults to $(PREFIX)/bin. Without PREFIX=/usr it defaults to
+	# /usr/local/bin/podman while the deb installs podman to /usr/bin, so every
+	# generated Quadlet unit fails with status=203/EXEC (executable not found).
+	GO111MODULE=on GOPATH= $(MAKE) PREFIX=/usr LIBDIR=/usr/lib GOMD2MAN=/usr/bin/go-md2man podman podman-remote podman-testing rootlessport quadlet docs docker-docs
 
 override_dh_auto_install:
 	install -D -m 0755 bin/podman debian/tmp/usr/bin/podman

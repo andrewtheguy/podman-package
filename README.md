@@ -58,41 +58,41 @@ Each workflow builds all its platform/architecture combinations in parallel, the
 
 ## Local Builds
 
-Zero-argument scripts for building locally with Docker Buildx:
+Use one explicit Buildx entrypoint:
 
 ```bash
-# Podman
-./scripts/build-podman-deb-ubuntu-noble.sh        # Ubuntu 24.04 (noble)
-./scripts/build-podman-deb-ubuntu-resolute.sh     # Ubuntu 26.04 (resolute)
-./scripts/build-podman-deb-debian-trixie.sh       # Debian 13 (trixie)
+./scripts/build-deb.sh <package> <distro> <version>
+```
 
-# netavark
-./scripts/build-netavark-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-netavark-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-netavark-deb-debian-trixie.sh     # Debian 13 (trixie)
+Packages:
+- `podman`
+- `netavark`
+- `aardvark-dns`
+- `containers-common`
+- `containers-storage`
 
-# aardvark-dns
-./scripts/build-aardvark-dns-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-aardvark-dns-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-aardvark-dns-deb-debian-trixie.sh     # Debian 13 (trixie)
+Targets:
+- `ubuntu noble`
+- `ubuntu resolute`
+- `debian trixie`
 
-# containers-common (config files; Architecture: all)
-./scripts/build-containers-common-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-containers-common-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-containers-common-deb-debian-trixie.sh     # Debian 13 (trixie)
+Examples:
 
-# containers-storage (CLI + storage.conf)
-./scripts/build-containers-storage-deb-ubuntu-noble.sh      # Ubuntu 24.04 (noble)
-./scripts/build-containers-storage-deb-ubuntu-resolute.sh   # Ubuntu 26.04 (resolute)
-./scripts/build-containers-storage-deb-debian-trixie.sh     # Debian 13 (trixie)
+```bash
+./scripts/build-deb.sh podman ubuntu noble
+./scripts/build-deb.sh netavark debian trixie
+./scripts/build-deb.sh containers-storage ubuntu resolute
 ```
 
 ## Script Layout
 
 - GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman) and `.github/workflows/build-and-release-extras.yml` (companion packages)
-- Host/orchestrator scripts remain under `scripts/`.
-- In-container build scripts are under `scripts/container/`.
-- Shared helpers remain under `scripts/lib/`.
+- Host/orchestrator entrypoint: `scripts/build-deb.sh`
+- Shared host helpers: `scripts/lib/`
+- Shared in-container dispatcher: `scripts/container/build.sh`
+- Product build modules: `scripts/container/products/`
+- Shared Dockerfile: `docker/Dockerfile`
+- Package patch hierarchy: `packaging/<package>/<distro>/<version>/patches/`
 
 ## Output Contract
 
@@ -109,7 +109,7 @@ Example UTC date version:
 - `20260216` (Monday, February 16, 2026 UTC)
 
 Same-day rerun behavior:
-- Each script deletes its own `output/<distro>/<YYYYMMDD>/` directory before rebuilding.
+- Each build invocation deletes its own `output/<distro>/<YYYYMMDD>/` directory before rebuilding.
 - This intentionally replaces same-day artifacts for that distro.
 
 Per-architecture run behavior:
@@ -124,7 +124,7 @@ Per-architecture run behavior:
 - GitHub Actions: uses native `amd64` and `arm64` runners with `docker build` (BuildKit default). All supported distro/arch combinations build in parallel.
 - Local: uses `docker buildx build --platform` for cross-compilation. Architectures run sequentially.
 - Uses `--pull --no-cache` for each build to ensure fresh apt metadata/security updates on every run.
-- Uses pinned `PODMAN_TAG` from `packaging/versions.env`.
+- Uses pinned upstream inputs from `packaging/versions.env`.
 - Derives Go toolchain version from upstream Podman `go.mod`.
 - Injects distro packaging (`debian/`) into upstream Podman source.
 - Applies repository-managed patch series only (no runtime fallback).
@@ -139,8 +139,8 @@ Per-architecture run behavior:
 No runtime fallback or auto-detection is used.
 
 Patch directory convention:
-- `packaging/patches-<family>-<codename>/series`
-- `packaging/patches-<family>-<codename>/*.patch`
+- `packaging/<package>/<distro>/<version>/patches/series`
+- `packaging/<package>/<distro>/<version>/patches/*.patch`
 
 Notes:
 - Each workflow uses its own `series` file exactly as-is.

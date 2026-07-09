@@ -1,9 +1,5 @@
 name: Build and Release Podman Companion .deb Packages
 
-# Builds every package that the Podman release workflow does not cover
-# (netavark, aardvark-dns, containers-common, containers-storage) and
-# publishes them all into a single unified "extras" release.
-
 on:
   workflow_dispatch: {}
 
@@ -63,9 +59,6 @@ jobs:
         run: |
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
 
-          # All companion packages from this run share a single release. Find
-          # the next free revision for the unified tag so re-runs on the same
-          # day do not collide with an existing release.
           REVISION=1
           while gh release view "podman-extras-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
             REVISION=$((REVISION + 1))
@@ -109,197 +102,134 @@ jobs:
           EOF
           )"
 
-  build-netavark:
+  build-compiled:
     needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
-          - distro: noble
+          - product: netavark
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.netavark-ubuntu-noble
-          - distro: noble
+          - product: netavark
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.netavark-ubuntu-noble
-          - distro: trixie
+          - product: netavark
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.netavark-debian-trixie
-          - distro: trixie
+          - product: netavark
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.netavark-debian-trixie
-          - distro: resolute
+          - product: netavark
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.netavark-ubuntu-resolute
-          - distro: resolute
+          - product: netavark
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.netavark-ubuntu-resolute
+          - product: aardvark-dns
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: aardvark-dns
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: aardvark-dns
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: aardvark-dns
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: aardvark-dns
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: aardvark-dns
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: containers-storage
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: containers-storage
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: containers-storage
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: containers-storage
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: containers-storage
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: amd64
+            runner: ubuntu-24.04
+          - product: containers-storage
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build .deb packages
+      - name: Build .deb package
         env:
           BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
           BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
           NETAVARK_TAG: ${{ needs.prepare.outputs.netavark_tag }}
           NETAVARK_UPSTREAM_SHA256: ${{ needs.prepare.outputs.netavark_upstream_sha256 }}
           NETAVARK_VENDOR_SHA256: ${{ needs.prepare.outputs.netavark_vendor_sha256 }}
-          RUST_VERSION: ${{ needs.prepare.outputs.rust_version }}
-        run: |
-          docker build \
-            --pull \
-            --no-cache \
-            --build-arg "DISTRO=${{ matrix.distro }}" \
-            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
-            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
-            --build-arg "NETAVARK_TAG=${NETAVARK_TAG}" \
-            --build-arg "NETAVARK_UPSTREAM_SHA256=${NETAVARK_UPSTREAM_SHA256}" \
-            --build-arg "NETAVARK_VENDOR_SHA256=${NETAVARK_VENDOR_SHA256}" \
-            --build-arg "RUST_VERSION=${RUST_VERSION}" \
-            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
-            --target artifact-export \
-            --output "type=local,dest=output" \
-            --file "${{ matrix.dockerfile }}" \
-            .
-      - name: List built artifacts
-        run: find output/ -type f | sort
-      - name: Upload .deb artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: netavark-debs-${{ matrix.distro }}-${{ matrix.arch }}
-          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
-          retention-days: 7
-          if-no-files-found: error
-      - name: Upload build metadata
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: netavark-metadata-${{ matrix.distro }}-${{ matrix.arch }}
-          path: |
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
-          retention-days: 30
-          if-no-files-found: warn
-
-  build-aardvark-dns:
-    needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - distro: noble
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-noble
-          - distro: noble
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-noble
-          - distro: trixie
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.aardvark-dns-debian-trixie
-          - distro: trixie
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.aardvark-dns-debian-trixie
-          - distro: resolute
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-resolute
-          - distro: resolute
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.aardvark-dns-ubuntu-resolute
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build .deb packages
-        env:
-          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
-          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
           AARDVARK_TAG: ${{ needs.prepare.outputs.aardvark_tag }}
           AARDVARK_UPSTREAM_SHA256: ${{ needs.prepare.outputs.aardvark_upstream_sha256 }}
           AARDVARK_VENDOR_SHA256: ${{ needs.prepare.outputs.aardvark_vendor_sha256 }}
           RUST_VERSION: ${{ needs.prepare.outputs.rust_version }}
-        run: |
-          docker build \
-            --pull \
-            --no-cache \
-            --build-arg "DISTRO=${{ matrix.distro }}" \
-            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
-            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
-            --build-arg "AARDVARK_TAG=${AARDVARK_TAG}" \
-            --build-arg "AARDVARK_UPSTREAM_SHA256=${AARDVARK_UPSTREAM_SHA256}" \
-            --build-arg "AARDVARK_VENDOR_SHA256=${AARDVARK_VENDOR_SHA256}" \
-            --build-arg "RUST_VERSION=${RUST_VERSION}" \
-            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
-            --target artifact-export \
-            --output "type=local,dest=output" \
-            --file "${{ matrix.dockerfile }}" \
-            .
-      - name: List built artifacts
-        run: find output/ -type f | sort
-      - name: Upload .deb artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: aardvark-dns-debs-${{ matrix.distro }}-${{ matrix.arch }}
-          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
-          retention-days: 7
-          if-no-files-found: error
-      - name: Upload build metadata
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: aardvark-dns-metadata-${{ matrix.distro }}-${{ matrix.arch }}
-          path: |
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
-          retention-days: 30
-          if-no-files-found: warn
-
-  build-containers-storage:
-    needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - distro: noble
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.containers-storage-ubuntu-noble
-          - distro: noble
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.containers-storage-ubuntu-noble
-          - distro: trixie
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.containers-storage-debian-trixie
-          - distro: trixie
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.containers-storage-debian-trixie
-          - distro: resolute
-            arch: amd64
-            runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.containers-storage-ubuntu-resolute
-          - distro: resolute
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.containers-storage-ubuntu-resolute
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build .deb packages
-        env:
-          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
-          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
           CONTAINERS_STORAGE_TAG: ${{ needs.prepare.outputs.cs_tag }}
           CONTAINERS_STORAGE_VERSION: ${{ needs.prepare.outputs.cs_version }}
           CONTAINERS_STORAGE_ARCHIVE_SHA256: ${{ needs.prepare.outputs.cs_archive_sha256 }}
@@ -307,23 +237,33 @@ jobs:
           docker build \
             --pull \
             --no-cache \
+            --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
+            --build-arg "PRODUCT=${{ matrix.product }}" \
+            --build-arg "DISTRO_FAMILY=${{ matrix.distro_family }}" \
             --build-arg "DISTRO=${{ matrix.distro }}" \
             --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
             --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
+            --build-arg "NETAVARK_TAG=${NETAVARK_TAG}" \
+            --build-arg "NETAVARK_UPSTREAM_SHA256=${NETAVARK_UPSTREAM_SHA256}" \
+            --build-arg "NETAVARK_VENDOR_SHA256=${NETAVARK_VENDOR_SHA256}" \
+            --build-arg "AARDVARK_TAG=${AARDVARK_TAG}" \
+            --build-arg "AARDVARK_UPSTREAM_SHA256=${AARDVARK_UPSTREAM_SHA256}" \
+            --build-arg "AARDVARK_VENDOR_SHA256=${AARDVARK_VENDOR_SHA256}" \
+            --build-arg "RUST_VERSION=${RUST_VERSION}" \
             --build-arg "CONTAINERS_STORAGE_TAG=${CONTAINERS_STORAGE_TAG}" \
             --build-arg "CONTAINERS_STORAGE_VERSION=${CONTAINERS_STORAGE_VERSION}" \
             --build-arg "CONTAINERS_STORAGE_ARCHIVE_SHA256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" \
             --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
             --target artifact-export \
             --output "type=local,dest=output" \
-            --file "${{ matrix.dockerfile }}" \
+            --file docker/Dockerfile \
             .
       - name: List built artifacts
         run: find output/ -type f | sort
       - name: Upload .deb artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: containers-storage-debs-${{ matrix.distro }}-${{ matrix.arch }}
+          name: ${{ matrix.product }}-debs-${{ matrix.distro }}-${{ matrix.arch }}
           path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
           retention-days: 7
           if-no-files-found: error
@@ -331,7 +271,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: containers-storage-metadata-${{ matrix.distro }}-${{ matrix.arch }}
+          name: ${{ matrix.product }}-metadata-${{ matrix.distro }}-${{ matrix.arch }}
           path: |
             output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
             output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
@@ -344,13 +284,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # containers-common is Architecture: all; one build per distro suffices.
-          - distro: noble
-            dockerfile: docker/Dockerfile.containers-common-ubuntu-noble
-          - distro: trixie
-            dockerfile: docker/Dockerfile.containers-common-debian-trixie
-          - distro: resolute
-            dockerfile: docker/Dockerfile.containers-common-ubuntu-resolute
+          - distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+          - distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+          - distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -365,6 +307,9 @@ jobs:
           docker build \
             --pull \
             --no-cache \
+            --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
+            --build-arg "PRODUCT=containers-common" \
+            --build-arg "DISTRO_FAMILY=${{ matrix.distro_family }}" \
             --build-arg "DISTRO=${{ matrix.distro }}" \
             --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
             --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
@@ -374,14 +319,14 @@ jobs:
             --build-arg "TARGET_ARCH=amd64" \
             --target artifact-export \
             --output "type=local,dest=output" \
-            --file "${{ matrix.dockerfile }}" \
+            --file docker/Dockerfile \
             .
       - name: List built artifacts
         run: find output/ -type f | sort
       - name: Upload .deb artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: containers-common-debs-${{ matrix.distro }}
+          name: containers-common-debs-${{ matrix.distro }}-amd64
           path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/*.deb
           retention-days: 7
           if-no-files-found: error
@@ -389,7 +334,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: containers-common-metadata-${{ matrix.distro }}
+          name: containers-common-metadata-${{ matrix.distro }}-amd64
           path: |
             output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/SHA256SUMS
             output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/build.log
@@ -399,9 +344,7 @@ jobs:
   publish:
     needs:
       - prepare
-      - build-netavark
-      - build-aardvark-dns
-      - build-containers-storage
+      - build-compiled
       - build-containers-common
     runs-on: ubuntu-24.04
     env:
@@ -434,9 +377,6 @@ jobs:
           RELEASE_REVISION="${{ needs.prepare.outputs.release_revision }}"
           RELEASE_TAG="${{ needs.prepare.outputs.release_tag }}"
 
-          # All build jobs succeeded (publish only runs when they pass), so
-          # flip the draft to a published pre-release with the full checksum
-          # manifest in the notes.
           gh release edit "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --draft=false \

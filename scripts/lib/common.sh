@@ -30,13 +30,12 @@ verify_sha256() {
 
 # Loads packaging/versions.env and resolves the product-specific pinned inputs.
 # PRODUCT selects which input set to validate and which docker build args to pass.
-# Defaults to "podman" so existing podman orchestrators need no changes.
 load_versions_config() {
   [[ -f "${VERSION_CONFIG}" ]] || die "missing versions config: ${VERSION_CONFIG}"
   # shellcheck disable=SC1090
   source "${VERSION_CONFIG}"
 
-  PRODUCT="${PRODUCT:-podman}"
+  : "${PRODUCT:?PRODUCT is required}"
   PRODUCT_BUILD_ARGS=()
 
   case "${PRODUCT}" in
@@ -150,6 +149,9 @@ run_build_for_arch() {
     --pull \
     --no-cache \
     --platform "linux/${arch}" \
+    --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
+    --build-arg "PRODUCT=${PRODUCT}" \
+    --build-arg "DISTRO_FAMILY=${DISTRO_FAMILY}" \
     --build-arg "DISTRO=${DISTRO}" \
     --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
     --build-arg "BUILD_REVISION=${revision}" \

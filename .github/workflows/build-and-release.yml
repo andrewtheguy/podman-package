@@ -34,9 +34,6 @@ jobs:
           PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
 
-          # All distros from this run share a single release. Find the next
-          # free revision for the unified tag so re-runs on the same day do
-          # not collide with an existing release.
           REVISION=1
           while gh release view "${PODMAN_TAG}-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
             REVISION=$((REVISION + 1))
@@ -81,30 +78,36 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: noble
+          - distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.ubuntu-noble
-          - distro: noble
+          - distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.ubuntu-noble
-          - distro: trixie
+          - distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.debian-trixie
-          - distro: trixie
+          - distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.debian-trixie
-          - distro: resolute
+          - distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
             arch: amd64
             runner: ubuntu-24.04
-            dockerfile: docker/Dockerfile.ubuntu-resolute
-          - distro: resolute
+          - distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
             arch: arm64
             runner: ubuntu-24.04-arm
-            dockerfile: docker/Dockerfile.ubuntu-resolute
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +121,9 @@ jobs:
           docker build \
             --pull \
             --no-cache \
+            --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
+            --build-arg "PRODUCT=podman" \
+            --build-arg "DISTRO_FAMILY=${{ matrix.distro_family }}" \
             --build-arg "DISTRO=${{ matrix.distro }}" \
             --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
             --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
@@ -126,7 +132,7 @@ jobs:
             --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
             --target artifact-export \
             --output "type=local,dest=output" \
-            --file "${{ matrix.dockerfile }}" \
+            --file docker/Dockerfile \
             .
       - name: List built artifacts
         run: find output/ -type f | sort
@@ -182,9 +188,6 @@ jobs:
           RELEASE_REVISION="${{ needs.prepare.outputs.release_revision }}"
           RELEASE_TAG="${{ needs.prepare.outputs.release_tag }}"
 
-          # All matrix builds succeeded (publish only runs when the build job
-          # passes), so flip the draft to a published pre-release with the full
-          # checksum manifest in the notes.
           gh release edit "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --draft=false \

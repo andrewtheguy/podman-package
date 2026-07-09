@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       build_version: ${{ steps.vars.outputs.build_version }}
       release_revision: ${{ steps.tags.outputs.release_revision }}
@@ -113,7 +113,7 @@ jobs:
             distro: noble
             base_image: ubuntu:noble
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: netavark
             distro_family: ubuntu
             distro: noble
@@ -125,7 +125,7 @@ jobs:
             distro: resolute
             base_image: ubuntu:resolute
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: netavark
             distro_family: ubuntu
             distro: resolute
@@ -137,7 +137,7 @@ jobs:
             distro: trixie
             base_image: debian:trixie
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: netavark
             distro_family: debian
             distro: trixie
@@ -149,7 +149,7 @@ jobs:
             distro: noble
             base_image: ubuntu:noble
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: aardvark-dns
             distro_family: ubuntu
             distro: noble
@@ -161,7 +161,7 @@ jobs:
             distro: resolute
             base_image: ubuntu:resolute
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: aardvark-dns
             distro_family: ubuntu
             distro: resolute
@@ -173,7 +173,7 @@ jobs:
             distro: trixie
             base_image: debian:trixie
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: aardvark-dns
             distro_family: debian
             distro: trixie
@@ -185,7 +185,7 @@ jobs:
             distro: noble
             base_image: ubuntu:noble
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: containers-storage
             distro_family: ubuntu
             distro: noble
@@ -197,7 +197,7 @@ jobs:
             distro: resolute
             base_image: ubuntu:resolute
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: containers-storage
             distro_family: ubuntu
             distro: resolute
@@ -209,7 +209,7 @@ jobs:
             distro: trixie
             base_image: debian:trixie
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - product: containers-storage
             distro_family: debian
             distro: trixie
@@ -293,7 +293,7 @@ jobs:
           - distro_family: debian
             distro: trixie
             base_image: debian:trixie
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build .deb package
@@ -346,7 +346,7 @@ jobs:
       - prepare
       - build-compiled
       - build-containers-common
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:

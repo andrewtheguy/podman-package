@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       build_version: ${{ steps.vars.outputs.build_version }}
       podman_tag: ${{ steps.vars.outputs.podman_tag }}
@@ -82,7 +82,7 @@ jobs:
             distro: noble
             base_image: ubuntu:noble
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - distro_family: ubuntu
             distro: noble
             base_image: ubuntu:noble
@@ -92,7 +92,7 @@ jobs:
             distro: trixie
             base_image: debian:trixie
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - distro_family: debian
             distro: trixie
             base_image: debian:trixie
@@ -102,7 +102,7 @@ jobs:
             distro: resolute
             base_image: ubuntu:resolute
             arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - distro_family: ubuntu
             distro: resolute
             base_image: ubuntu:resolute
@@ -156,7 +156,7 @@ jobs:
 
   publish:
     needs: [prepare, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:

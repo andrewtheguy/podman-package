@@ -35,6 +35,7 @@ podman_install_prereqs() {
     devscripts \
     dpkg-dev \
     equivs \
+    git \
     jq \
     patch \
     quilt \

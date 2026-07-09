@@ -166,6 +166,23 @@ jobs:
           pattern: debs-*
           path: debs
           merge-multiple: true
+      - name: Normalize release asset filenames
+        run: |
+          cd debs
+          shopt -s nullglob
+          for file in *.deb; do
+            # GitHub release uploads normalize '~' to '.', so do the same before
+            # checksums are generated.
+            normalized="${file//\~/.}"
+            if [[ "${normalized}" == "${file}" ]]; then
+              continue
+            fi
+            if [[ -e "${normalized}" ]]; then
+              echo "::error::Cannot rename ${file} to ${normalized}; target already exists"
+              exit 1
+            fi
+            mv -- "${file}" "${normalized}"
+          done
       - name: Generate checksums
         run: |
           cd debs

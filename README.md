@@ -264,7 +264,13 @@ Release tag formats:
 - Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
 - Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, containers-common, and containers-storage `.deb`s for every distro.
 
-Package version format inside generated `.deb` filenames: `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`).
+Package version format inside generated `.deb`s:
+`<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example
+`6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`). GitHub normalizes
+special characters in release asset filenames, so the workflow renames release
+assets before upload to use dots in the filename suffix (for example
+`6.0.0+20260415-1.trixie`) while leaving the package version inside the `.deb`
+unchanged.
 
 ## Runtime Requirement for Newer `pasta` Features
 

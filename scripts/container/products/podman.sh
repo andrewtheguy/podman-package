@@ -53,7 +53,7 @@ podman_prepare_sources() {
   local upstream_version="${PODMAN_TAG#v}"
   UPSTREAM_VERSION="${upstream_version}"
   local upstream_tarball="${WORK_ROOT}/podman-${upstream_version}.tar.gz"
-  local upstream_url="https://github.com/containers/podman/archive/refs/tags/${PODMAN_TAG}.tar.gz"
+  local upstream_url="https://github.com/podman-container-tools/podman/archive/refs/tags/${PODMAN_TAG}.tar.gz"
 
   log "Downloading upstream Podman source: ${upstream_url}"
   curl -fsSL -o "${upstream_tarball}" -L "${upstream_url}"

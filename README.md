@@ -153,8 +153,8 @@ Pinned upstream input config:
 
 ```bash
 # Podman (Go)
-PODMAN_TAG=v6.0.0
-UPSTREAM_SHA256=f35ac7c40f0fd01bfedfe627c23ff7a577b071d50f2b0726e4734d51810f5a7d
+PODMAN_TAG=v6.0.1
+UPSTREAM_SHA256=4829d7c1423523a6a4d5537dea7968ae7f6c22ed7f1d5f416638fd81c83caa47
 
 # netavark (Rust)
 NETAVARK_TAG=v2.0.0
@@ -184,7 +184,7 @@ Notes:
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
   To obtain the checksum for a given tag, download the tarball from GitHub and compute its SHA256:
   ```bash
-  curl -fsSL -L "https://github.com/containers/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
+  curl -fsSL -L "https://github.com/podman-container-tools/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
   ```
   Use the hex string from the output as the `UPSTREAM_SHA256` value.
 - Go is not separately pinned; it is read from upstream `go.mod` for the pinned Podman tag.

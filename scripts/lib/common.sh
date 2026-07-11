@@ -94,6 +94,23 @@ load_versions_config() {
         --build-arg "RUST_VERSION=${rust}"
       )
       ;;
+    crun)
+      local tag="${CRUN_TAG:-}"
+      local version="${CRUN_VERSION:-}"
+      local archive_sha="${CRUN_ARCHIVE_SHA256:-}"
+      [[ "${version}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || \
+        die "invalid or missing CRUN_VERSION in ${VERSION_CONFIG}: ${version:-<empty>}"
+      [[ "${tag}" == "${version}" ]] || \
+        die "CRUN_TAG (${tag:-<empty>}) must equal CRUN_VERSION (${version:-<empty>}) in ${VERSION_CONFIG}"
+      [[ "${archive_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing CRUN_ARCHIVE_SHA256 in ${VERSION_CONFIG}: ${archive_sha:-<empty>}"
+      RESOLVED_TAG="${tag}"
+      PRODUCT_BUILD_ARGS=(
+        --build-arg "CRUN_TAG=${tag}"
+        --build-arg "CRUN_VERSION=${version}"
+        --build-arg "CRUN_ARCHIVE_SHA256=${archive_sha}"
+      )
+      ;;
     containers-common)
       local tag="${CONTAINERS_COMMON_TAG:-}"
       local version="${CONTAINERS_COMMON_VERSION:-}"
@@ -129,7 +146,7 @@ load_versions_config() {
       )
       ;;
     *)
-      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', 'aardvark-dns', 'containers-common', or 'containers-storage')"
+      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', 'aardvark-dns', 'crun', 'containers-common', or 'containers-storage')"
       ;;
   esac
 }

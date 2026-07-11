@@ -18,6 +18,9 @@ case "${PRODUCT}" in
   netavark|aardvark-dns)
     source "${SCRIPT_DIR}/products/rust-companion.sh"
     ;;
+  crun)
+    source "${SCRIPT_DIR}/products/crun.sh"
+    ;;
   containers-common|containers-storage)
     source "${SCRIPT_DIR}/products/container-libs.sh"
     ;;

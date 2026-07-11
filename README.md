@@ -1,6 +1,6 @@
 # Podman Package Builders
 
-Build Podman, netavark, aardvark-dns, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman, netavark, aardvark-dns, crun, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
 netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
 (config files), and containers-storage (storage CLI + `storage.conf`) are
@@ -8,11 +8,20 @@ netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
 networking or name resolution without netavark/aardvark-dns, and needs config
 matching its release. They are shipped here as extra packages **built and
 released for all targets** (the distro repositories do not provide versions new
-enough for Podman 6). Install them together on each target. Podman, the two Rust
-components, and containers-storage follow the same pattern (distro `debian/`
-packaging + pinned upstream source + repo-managed patches + a self-installed
-toolchain); containers-common is `Architecture: all` and needs no compilation
-(config files + man pages only).
+enough for Podman 6). Install them together on each target.
+
+crun (C OCI runtime) is **recommended, not required**: Podman uses crun as its
+default runtime, and the newest crun tracks the latest OCI features and fixes,
+but the distro-provided crun (or runc) will still run containers. It is built and
+released here for all targets so you can pull in the current release when you want
+it.
+
+Podman, the two Rust components, crun, and containers-storage follow the same
+pattern (distro `debian/` packaging + pinned upstream source + repo-managed
+patches + a self-installed toolchain where needed); crun builds from its
+self-contained upstream release tarball (autotools, system libs), and
+containers-common is `Architecture: all` and needs no compilation (config files +
+man pages only).
 
 > **Why containers-storage matters:** Podman 6.0's storage library (v1.63.0)
 > honors an explicitly-set `graphroot` even for rootless users (it no longer
@@ -47,7 +56,7 @@ matching netavark, aardvark-dns, and containers-common installed alongside it.
 Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
-- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, containers-common, and containers-storage (the packages the Podman workflow does not cover).
+- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, crun, containers-common, and containers-storage (the packages the Podman workflow does not cover).
 
 Each workflow builds all its platform/architecture combinations in parallel, then publishes a **single unified pre-release** containing every `.deb` from that run plus a combined `SHA256SUMS`:
 
@@ -68,6 +77,7 @@ Packages:
 - `podman`
 - `netavark`
 - `aardvark-dns`
+- `crun`
 - `containers-common`
 - `containers-storage`
 
@@ -167,6 +177,11 @@ AARDVARK_TAG=v2.0.0
 AARDVARK_UPSTREAM_SHA256=d3f5d6b3be3c2d80e8257fb9467e34ff104f299474427979454034dca6dc88cc
 AARDVARK_VENDOR_SHA256=c5ca49d98c535fa3c8d0d195512faf1f8610ad9ca4f62bec73c7bbfc4ddcc0b6
 
+# crun (C OCI runtime) — built from the upstream release dist tarball
+CRUN_TAG=1.28
+CRUN_VERSION=1.28
+CRUN_ARCHIVE_SHA256=eb8fe73ffe44d868b14bb94fa6c295bd57e8bf023de43b61579da826c07cc406
+
 # containers-common (config files; Architecture: all) — from the container-libs monorepo
 CONTAINERS_COMMON_TAG=common/v0.68.0
 CONTAINERS_COMMON_VERSION=0.68.0
@@ -202,6 +217,16 @@ Notes:
   - `AARDVARK_VENDOR_SHA256` matches the release vendored-deps tarball
     (`.../aardvark-dns/releases/download/v<VERSION>/aardvark-dns-v<VERSION>-vendor.tar.gz`).
   - aardvark-dns ships a single binary (no systemd units, no man page).
+- crun uses its bare version as the tag (no leading `v`, e.g. `1.28`) and
+  `CRUN_TAG` must equal `CRUN_VERSION`. `CRUN_ARCHIVE_SHA256` matches the upstream
+  release **dist tarball** (`.../crun/releases/download/<VERSION>/crun-<VERSION>.tar.gz`),
+  which is self-contained (bundled libocispec + blake3, pre-generated `configure`),
+  so no submodules or autoreconf are needed:
+  ```bash
+  curl -fsSL -L "https://github.com/containers/crun/releases/download/<VERSION>/crun-<VERSION>.tar.gz" | sha256sum
+  ```
+  It compiles against system libs (json-c, libseccomp, libsystemd, libcap) and
+  installs only the `crun` binary + man page (`--disable-libcrun`, CRIU disabled).
 - containers-common is built from the `containers/container-libs` monorepo (the
   `common/` subdir), tagged `common/v<VERSION>`. It produces an
   `Architecture: all` package (config files + man pages; no Go compilation), so

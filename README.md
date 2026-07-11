@@ -2,19 +2,26 @@
 
 Build Podman, netavark, aardvark-dns, crun, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
-netavark (Rust network stack), aardvark-dns (Rust DNS server), crun (C OCI
-runtime), containers-common (config files), and containers-storage (storage CLI +
-`storage.conf`) are **required companions of Podman 6.0** — Podman 6 will not
-provide container networking or name resolution without netavark/aardvark-dns,
-runs containers with crun by default, and needs config matching its release. They
-are shipped here as extra packages **built and released for all targets** (the
-distro repositories do not provide versions new enough for Podman 6). Install them
-together on each target. Podman, the two Rust components, crun, and
-containers-storage follow the same pattern (distro `debian/` packaging + pinned
-upstream source + repo-managed patches + a self-installed toolchain where
-needed); crun builds from its self-contained upstream release tarball (autotools,
-system libs), and containers-common is `Architecture: all` and needs no
-compilation (config files + man pages only).
+netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
+(config files), and containers-storage (storage CLI + `storage.conf`) are
+**required companions of Podman 6.0** — Podman 6 will not provide container
+networking or name resolution without netavark/aardvark-dns, and needs config
+matching its release. They are shipped here as extra packages **built and
+released for all targets** (the distro repositories do not provide versions new
+enough for Podman 6). Install them together on each target.
+
+crun (C OCI runtime) is **recommended, not required**: Podman uses crun as its
+default runtime, and the newest crun tracks the latest OCI features and fixes,
+but the distro-provided crun (or runc) will still run containers. It is built and
+released here for all targets so you can pull in the current release when you want
+it.
+
+Podman, the two Rust components, crun, and containers-storage follow the same
+pattern (distro `debian/` packaging + pinned upstream source + repo-managed
+patches + a self-installed toolchain where needed); crun builds from its
+self-contained upstream release tarball (autotools, system libs), and
+containers-common is `Architecture: all` and needs no compilation (config files +
+man pages only).
 
 > **Why containers-storage matters:** Podman 6.0's storage library (v1.63.0)
 > honors an explicitly-set `graphroot` even for rootless users (it no longer

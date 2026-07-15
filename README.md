@@ -1,12 +1,12 @@
 # Podman Package Builders
 
-Build Podman, netavark, aardvark-dns, crun, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
+Build Podman, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
-netavark (Rust network stack), aardvark-dns (Rust DNS server), containers-common
-(config files), and containers-storage (storage CLI + `storage.conf`) are
+netavark (Rust network stack), aardvark-dns (Rust DNS server), conmon (container
+monitor), containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
 **required companions of Podman 6.0** — Podman 6 will not provide container
-networking or name resolution without netavark/aardvark-dns, and needs config
-matching its release. They are shipped here as extra packages **built and
+networking or name resolution without netavark/aardvark-dns, requires conmon to
+monitor containers, and needs config matching its release. They are shipped here as extra packages **built and
 released for all targets** (the distro repositories do not provide versions new
 enough for Podman 6). Install them together on each target.
 
@@ -16,10 +16,11 @@ but the distro-provided crun (or runc) will still run containers. It is built an
 released here for all targets so you can pull in the current release when you want
 it.
 
-Podman, the two Rust components, crun, and containers-storage follow the same
+Podman, the two Rust components, crun, conmon, and containers-storage follow the same
 pattern (distro `debian/` packaging + pinned upstream source + repo-managed
 patches + a self-installed toolchain where needed); crun builds from its
-self-contained upstream release tarball (autotools, system libs), and
+self-contained upstream release tarball (autotools, system libs), conmon builds
+from its upstream tag archive with the target distro's packaging, and
 containers-common is `Architecture: all` and needs no compilation (config files +
 man pages only).
 
@@ -32,8 +33,9 @@ man pages only).
 > `graphroot`/`runroot` commented out, so rootless Podman falls back to its
 > per-user default.
 
-The podman package built here declares versioned dependencies on these
-companions, so installing podman pulls the matching set:
+The podman package built here preserves its distro conmon dependency and declares
+versioned dependencies on the other required companions, so installing podman
+pulls the matching set:
 `Depends: … netavark (>= 2.0.0), aardvark-dns (>= 2.0.0), golang-github-containers-common (>= 0.68.0), containers-storage (>= 1.63.0)`.
 The older distro versions do not satisfy these, so install the repo's `.deb`s
 together (e.g. `apt install ./*.deb`).
@@ -43,7 +45,7 @@ together (e.g. `apt install ./*.deb`).
 All compiled packages build for both architectures: `amd64` and `arm64`.
 containers-common is `Architecture: all` (one build per distro). Every product
 is built for all three targets — and on each target Podman 6.0 needs the
-matching netavark, aardvark-dns, and containers-common installed alongside it.
+matching netavark, aardvark-dns, conmon, and containers-common installed alongside it.
 
 | Platform | Codename |
 |----------|----------|
@@ -56,7 +58,7 @@ matching netavark, aardvark-dns, and containers-common installed alongside it.
 Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
-- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, crun, containers-common, and containers-storage (the packages the Podman workflow does not cover).
+- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage (the packages the Podman workflow does not cover).
 
 Each workflow builds all its platform/architecture combinations in parallel, then publishes a **single unified pre-release** containing every `.deb` from that run plus a combined `SHA256SUMS`:
 
@@ -78,6 +80,7 @@ Packages:
 - `netavark`
 - `aardvark-dns`
 - `crun`
+- `conmon`
 - `containers-common`
 - `containers-storage`
 
@@ -182,6 +185,11 @@ CRUN_TAG=1.28
 CRUN_VERSION=1.28
 CRUN_ARCHIVE_SHA256=eb8fe73ffe44d868b14bb94fa6c295bd57e8bf023de43b61579da826c07cc406
 
+# conmon (C container monitor) — built from the upstream tag archive
+CONMON_TAG=v2.2.1
+CONMON_VERSION=2.2.1
+CONMON_ARCHIVE_SHA256=814fb5979a3a4b8576b1f901e606b482bebb41cb7e57926e6d5765ee786b96d3
+
 # containers-common (config files; Architecture: all) — from the container-libs monorepo
 CONTAINERS_COMMON_TAG=common/v0.68.0
 CONTAINERS_COMMON_VERSION=0.68.0
@@ -227,6 +235,11 @@ Notes:
   ```
   It compiles against system libs (json-c, libseccomp, libsystemd, libcap) and
   installs only the `crun` binary + man page (`--disable-libcrun`, CRIU disabled).
+- conmon uses a `v<VERSION>` tag. `CONMON_ARCHIVE_SHA256` matches the GitHub tag
+  archive (`.../conmon/archive/refs/tags/v<VERSION>.tar.gz`). Each target starts
+  from its distro `conmon` source package's `debian/` metadata, replaces the
+  patch series with the repo-managed series, and builds the upstream C source
+  against that target's glib, systemd, and seccomp libraries.
 - containers-common is built from the `containers/container-libs` monorepo (the
   `common/` subdir), tagged `common/v<VERSION>`. It produces an
   `Architecture: all` package (config files + man pages; no Go compilation), so
@@ -281,13 +294,13 @@ Both methods require network access to:
 
 There are two workflows, each triggered manually (`workflow_dispatch`):
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
-- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, containers-common, containers-storage)
+- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
 
-Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
+Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, crun, conmon, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Release tag formats:
 - Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
-- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, containers-common, and containers-storage `.deb`s for every distro.
+- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb`s for every distro.
 
 Package version format inside generated `.deb`s:
 `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example

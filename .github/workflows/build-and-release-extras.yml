@@ -26,6 +26,9 @@ jobs:
       crun_tag: ${{ steps.vars.outputs.crun_tag }}
       crun_version: ${{ steps.vars.outputs.crun_version }}
       crun_archive_sha256: ${{ steps.vars.outputs.crun_archive_sha256 }}
+      conmon_tag: ${{ steps.vars.outputs.conmon_tag }}
+      conmon_version: ${{ steps.vars.outputs.conmon_version }}
+      conmon_archive_sha256: ${{ steps.vars.outputs.conmon_archive_sha256 }}
       cc_tag: ${{ steps.vars.outputs.cc_tag }}
       cc_version: ${{ steps.vars.outputs.cc_version }}
       cc_archive_sha256: ${{ steps.vars.outputs.cc_archive_sha256 }}
@@ -40,26 +43,31 @@ jobs:
         id: vars
         run: |
           source packaging/versions.env
-          echo "build_version=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
-          echo "podman_version=${PODMAN_TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "netavark_tag=${NETAVARK_TAG}" >> "$GITHUB_OUTPUT"
-          echo "netavark_version=${NETAVARK_TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "netavark_upstream_sha256=${NETAVARK_UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "netavark_vendor_sha256=${NETAVARK_VENDOR_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "aardvark_tag=${AARDVARK_TAG}" >> "$GITHUB_OUTPUT"
-          echo "aardvark_version=${AARDVARK_TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "aardvark_upstream_sha256=${AARDVARK_UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "aardvark_vendor_sha256=${AARDVARK_VENDOR_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "rust_version=${RUST_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "crun_tag=${CRUN_TAG}" >> "$GITHUB_OUTPUT"
-          echo "crun_version=${CRUN_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "crun_archive_sha256=${CRUN_ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "cc_tag=${CONTAINERS_COMMON_TAG}" >> "$GITHUB_OUTPUT"
-          echo "cc_version=${CONTAINERS_COMMON_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "cc_archive_sha256=${CONTAINERS_COMMON_ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
-          echo "cs_tag=${CONTAINERS_STORAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "cs_version=${CONTAINERS_STORAGE_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "cs_archive_sha256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
+          {
+            echo "build_version=$(date -u +%Y%m%d)"
+            echo "podman_version=${PODMAN_TAG#v}"
+            echo "netavark_tag=${NETAVARK_TAG}"
+            echo "netavark_version=${NETAVARK_TAG#v}"
+            echo "netavark_upstream_sha256=${NETAVARK_UPSTREAM_SHA256}"
+            echo "netavark_vendor_sha256=${NETAVARK_VENDOR_SHA256}"
+            echo "aardvark_tag=${AARDVARK_TAG}"
+            echo "aardvark_version=${AARDVARK_TAG#v}"
+            echo "aardvark_upstream_sha256=${AARDVARK_UPSTREAM_SHA256}"
+            echo "aardvark_vendor_sha256=${AARDVARK_VENDOR_SHA256}"
+            echo "rust_version=${RUST_VERSION}"
+            echo "crun_tag=${CRUN_TAG}"
+            echo "crun_version=${CRUN_VERSION}"
+            echo "crun_archive_sha256=${CRUN_ARCHIVE_SHA256}"
+            echo "conmon_tag=${CONMON_TAG}"
+            echo "conmon_version=${CONMON_VERSION}"
+            echo "conmon_archive_sha256=${CONMON_ARCHIVE_SHA256}"
+            echo "cc_tag=${CONTAINERS_COMMON_TAG}"
+            echo "cc_version=${CONTAINERS_COMMON_VERSION}"
+            echo "cc_archive_sha256=${CONTAINERS_COMMON_ARCHIVE_SHA256}"
+            echo "cs_tag=${CONTAINERS_STORAGE_TAG}"
+            echo "cs_version=${CONTAINERS_STORAGE_VERSION}"
+            echo "cs_archive_sha256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}"
+          } >> "$GITHUB_OUTPUT"
       - name: Resolve release tag
         id: tags
         run: |
@@ -94,6 +102,7 @@ jobs:
           - netavark ${{ steps.vars.outputs.netavark_version }}
           - aardvark-dns ${{ steps.vars.outputs.aardvark_version }}
           - crun ${{ steps.vars.outputs.crun_version }}
+          - conmon ${{ steps.vars.outputs.conmon_version }}
           - containers-common ${{ steps.vars.outputs.cc_version }}
           - containers-storage ${{ steps.vars.outputs.cs_version }}
 
@@ -223,6 +232,42 @@ jobs:
             base_image: debian:trixie
             arch: arm64
             runner: ubuntu-24.04-arm
+          - product: conmon
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: amd64
+            runner: ubuntu-latest
+          - product: conmon
+            distro_family: ubuntu
+            distro: noble
+            base_image: ubuntu:noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: conmon
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: amd64
+            runner: ubuntu-latest
+          - product: conmon
+            distro_family: ubuntu
+            distro: resolute
+            base_image: ubuntu:resolute
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - product: conmon
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: amd64
+            runner: ubuntu-latest
+          - product: conmon
+            distro_family: debian
+            distro: trixie
+            base_image: debian:trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - product: containers-storage
             distro_family: ubuntu
             distro: noble
@@ -276,6 +321,9 @@ jobs:
           CRUN_TAG: ${{ needs.prepare.outputs.crun_tag }}
           CRUN_VERSION: ${{ needs.prepare.outputs.crun_version }}
           CRUN_ARCHIVE_SHA256: ${{ needs.prepare.outputs.crun_archive_sha256 }}
+          CONMON_TAG: ${{ needs.prepare.outputs.conmon_tag }}
+          CONMON_VERSION: ${{ needs.prepare.outputs.conmon_version }}
+          CONMON_ARCHIVE_SHA256: ${{ needs.prepare.outputs.conmon_archive_sha256 }}
           CONTAINERS_STORAGE_TAG: ${{ needs.prepare.outputs.cs_tag }}
           CONTAINERS_STORAGE_VERSION: ${{ needs.prepare.outputs.cs_version }}
           CONTAINERS_STORAGE_ARCHIVE_SHA256: ${{ needs.prepare.outputs.cs_archive_sha256 }}
@@ -299,6 +347,9 @@ jobs:
             --build-arg "CRUN_TAG=${CRUN_TAG}" \
             --build-arg "CRUN_VERSION=${CRUN_VERSION}" \
             --build-arg "CRUN_ARCHIVE_SHA256=${CRUN_ARCHIVE_SHA256}" \
+            --build-arg "CONMON_TAG=${CONMON_TAG}" \
+            --build-arg "CONMON_VERSION=${CONMON_VERSION}" \
+            --build-arg "CONMON_ARCHIVE_SHA256=${CONMON_ARCHIVE_SHA256}" \
             --build-arg "CONTAINERS_STORAGE_TAG=${CONTAINERS_STORAGE_TAG}" \
             --build-arg "CONTAINERS_STORAGE_VERSION=${CONTAINERS_STORAGE_VERSION}" \
             --build-arg "CONTAINERS_STORAGE_ARCHIVE_SHA256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" \
@@ -456,6 +507,7 @@ jobs:
           - netavark ${{ needs.prepare.outputs.netavark_version }}
           - aardvark-dns ${{ needs.prepare.outputs.aardvark_version }}
           - crun ${{ needs.prepare.outputs.crun_version }}
+          - conmon ${{ needs.prepare.outputs.conmon_version }}
           - containers-common ${{ needs.prepare.outputs.cc_version }}
           - containers-storage ${{ needs.prepare.outputs.cs_version }}
 

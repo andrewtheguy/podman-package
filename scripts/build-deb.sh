@@ -14,6 +14,7 @@ Packages:
   netavark
   aardvark-dns
   crun
+  conmon
   containers-common
   containers-storage
 
@@ -34,7 +35,7 @@ DISTRO_FAMILY="$2"
 DISTRO="$3"
 
 case "${PRODUCT}" in
-  podman|netavark|aardvark-dns|crun|containers-common|containers-storage) ;;
+  podman|netavark|aardvark-dns|crun|conmon|containers-common|containers-storage) ;;
   *)
     usage
     die "unsupported package: ${PRODUCT}"

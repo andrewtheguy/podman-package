@@ -111,6 +111,25 @@ load_versions_config() {
         --build-arg "CRUN_ARCHIVE_SHA256=${archive_sha}"
       )
       ;;
+    conmon)
+      local tag="${CONMON_TAG:-}"
+      local version="${CONMON_VERSION:-}"
+      local archive_sha="${CONMON_ARCHIVE_SHA256:-}"
+      [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONMON_TAG in ${VERSION_CONFIG}: ${tag:-<empty>}"
+      [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "invalid or missing CONMON_VERSION in ${VERSION_CONFIG}: ${version:-<empty>}"
+      [[ "${tag}" == "v${version}" ]] || \
+        die "CONMON_TAG (${tag}) must equal v${CONMON_VERSION} in ${VERSION_CONFIG}"
+      [[ "${archive_sha}" =~ ^[0-9a-fA-F]{64}$ ]] || \
+        die "invalid or missing CONMON_ARCHIVE_SHA256 in ${VERSION_CONFIG}: ${archive_sha:-<empty>}"
+      RESOLVED_TAG="${tag}"
+      PRODUCT_BUILD_ARGS=(
+        --build-arg "CONMON_TAG=${tag}"
+        --build-arg "CONMON_VERSION=${version}"
+        --build-arg "CONMON_ARCHIVE_SHA256=${archive_sha}"
+      )
+      ;;
     containers-common)
       local tag="${CONTAINERS_COMMON_TAG:-}"
       local version="${CONTAINERS_COMMON_VERSION:-}"
@@ -146,7 +165,7 @@ load_versions_config() {
       )
       ;;
     *)
-      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', 'aardvark-dns', 'crun', 'containers-common', or 'containers-storage')"
+      die "unknown PRODUCT: ${PRODUCT} (expected 'podman', 'netavark', 'aardvark-dns', 'crun', 'conmon', 'containers-common', or 'containers-storage')"
       ;;
   esac
 }

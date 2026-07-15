@@ -21,6 +21,9 @@ case "${PRODUCT}" in
   crun)
     source "${SCRIPT_DIR}/products/crun.sh"
     ;;
+  conmon)
+    source "${SCRIPT_DIR}/products/conmon.sh"
+    ;;
   containers-common|containers-storage)
     source "${SCRIPT_DIR}/products/container-libs.sh"
     ;;

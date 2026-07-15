@@ -2,19 +2,20 @@
 
 Build Podman, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
-netavark (Rust network stack), aardvark-dns (Rust DNS server), conmon (container
-monitor), containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
+netavark (Rust network stack), aardvark-dns (Rust DNS server),
+containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
 **required companions of Podman 6.0** — Podman 6 will not provide container
-networking or name resolution without netavark/aardvark-dns, requires conmon to
-monitor containers, and needs config matching its release. They are shipped here as extra packages **built and
+networking or name resolution without netavark/aardvark-dns and needs config
+matching its release. They are shipped here as extra packages **built and
 released for all targets** (the distro repositories do not provide versions new
 enough for Podman 6). Install them together on each target.
 
-crun (C OCI runtime) is **recommended, not required**: Podman uses crun as its
-default runtime, and the newest crun tracks the latest OCI features and fixes,
-but the distro-provided crun (or runc) will still run containers. It is built and
-released here for all targets so you can pull in the current release when you want
-it.
+crun (C OCI runtime) and conmon (container monitor) are **recommended, not
+required**: Podman uses crun as its default runtime and conmon to monitor
+containers, and their newest releases track the latest features and fixes. The
+distro-provided crun (or runc) and conmon will still run containers. Both are
+built and released here for all targets so you can pull in the current releases
+when you want them.
 
 Podman, the two Rust components, crun, conmon, and containers-storage follow the same
 pattern (distro `debian/` packaging + pinned upstream source + repo-managed
@@ -34,8 +35,9 @@ man pages only).
 > per-user default.
 
 The podman package built here preserves its distro conmon dependency and declares
-versioned dependencies on the other required companions, so installing podman
-pulls the matching set:
+versioned dependencies on the required companions, so installing podman pulls
+the required matching set while either the distro or repo conmon package can
+satisfy the conmon dependency:
 `Depends: … netavark (>= 2.0.0), aardvark-dns (>= 2.0.0), golang-github-containers-common (>= 0.68.0), containers-storage (>= 1.63.0)`.
 The older distro versions do not satisfy these, so install the repo's `.deb`s
 together (e.g. `apt install ./*.deb`).
@@ -45,7 +47,7 @@ together (e.g. `apt install ./*.deb`).
 All compiled packages build for both architectures: `amd64` and `arm64`.
 containers-common is `Architecture: all` (one build per distro). Every product
 is built for all three targets — and on each target Podman 6.0 needs the
-matching netavark, aardvark-dns, conmon, and containers-common installed alongside it.
+matching netavark, aardvark-dns, and containers-common installed alongside it.
 
 | Platform | Codename |
 |----------|----------|

@@ -2,6 +2,12 @@
 
 Build Podman, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
 
+## Downloads
+
+- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22)
+- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion)
+- [All releases](https://github.com/andrewtheguy/podman-package/releases)
+
 netavark (Rust network stack), aardvark-dns (Rust DNS server),
 containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
 **required companions of Podman 6.0** — Podman 6 will not provide container
@@ -293,12 +299,6 @@ Both methods require network access to:
   - Go toolchain tarballs on `go.dev`
 
 ## Releases
-
-Browse the release histories separately:
-
-- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22)
-- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion)
-- [All releases](https://github.com/andrewtheguy/podman-package/releases)
 
 There are two workflows, each triggered manually (`workflow_dispatch`):
 

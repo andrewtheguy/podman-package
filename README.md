@@ -294,13 +294,21 @@ Both methods require network access to:
 
 ## Releases
 
+Browse the release histories separately:
+
+- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22)
+- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion)
+- [All releases](https://github.com/andrewtheguy/podman-package/releases)
+
 There are two workflows, each triggered manually (`workflow_dispatch`):
+
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
 - **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
 
 Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, crun, conmon, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Release tag formats:
+
 - Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
 - Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb`s for every distro.
 

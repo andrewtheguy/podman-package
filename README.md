@@ -1,12 +1,20 @@
-# Podman Package Builders
+# Podman `.deb` Package Builders
 
-Build Podman, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb` packages in Docker for isolated, deterministic builds.
+This repository builds current Podman releases and their supporting components
+as installable `.deb` packages for Ubuntu and Debian on `amd64` and `arm64`.
+Every package is built in Docker from pinned upstream sources and distro
+packaging to keep builds isolated and reproducible.
 
 ## Downloads
 
-- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22)
-- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion)
-- [All releases](https://github.com/andrewtheguy/podman-package/releases)
+Builds are published in two release groups:
+
+- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22) — the main `podman`, `podman-remote`, and `podman-docker` packages.
+- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion) — networking, DNS, runtime, monitoring, configuration, and storage packages: netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage.
+- [All releases](https://github.com/andrewtheguy/podman-package/releases) — the combined chronological GitHub release history.
+
+For a complete Podman 6 installation, download the packages for your distro and
+architecture from both the Podman and Podman Companion release groups.
 
 netavark (Rust network stack), aardvark-dns (Rust DNS server),
 containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are

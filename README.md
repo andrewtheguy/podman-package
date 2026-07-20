@@ -339,6 +339,11 @@ Ubuntu 24.04 (`noble`):
 
 - [`passt` in Ubuntu plucky](https://packages.ubuntu.com/plucky/passt)
 
+To install the latest `passt` regardless of distro release:
+
+- [`passt` in Debian unstable](https://packages.debian.org/source/unstable/passt)
+- [`passt` in Ubuntu (Launchpad)](https://launchpad.net/ubuntu/+source/passt)
+
 Debian 13 (`trixie`):
 - No workaround is required.
 - Debian trixie provides `passt 0.0~git20250503.587980c-2`, which satisfies the requirement above.

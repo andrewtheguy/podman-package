@@ -14,6 +14,7 @@ jobs:
       release_revision: ${{ steps.tags.outputs.release_revision }}
       release_tag: ${{ steps.tags.outputs.release_tag }}
       podman_version: ${{ steps.vars.outputs.podman_version }}
+      passt_version: ${{ steps.vars.outputs.passt_version }}
       netavark_tag: ${{ steps.vars.outputs.netavark_tag }}
       netavark_version: ${{ steps.vars.outputs.netavark_version }}
       netavark_upstream_sha256: ${{ steps.vars.outputs.netavark_upstream_sha256 }}
@@ -46,6 +47,7 @@ jobs:
           {
             echo "build_version=$(date -u +%Y%m%d)"
             echo "podman_version=${PODMAN_TAG#v}"
+            echo "passt_version=${PASST_VERSION}"
             echo "netavark_tag=${NETAVARK_TAG}"
             echo "netavark_version=${NETAVARK_TAG#v}"
             echo "netavark_upstream_sha256=${NETAVARK_UPSTREAM_SHA256}"
@@ -98,7 +100,8 @@ jobs:
           ## Podman ${PODMAN_VERSION} companion .deb packages
 
           Supporting packages required alongside Podman ${PODMAN_VERSION}, built
-          for amd64 and arm64 (containers-common is \`Architecture: all\`):
+          or pinned for amd64 and arm64 (containers-common is \`Architecture: all\`):
+          - passt ${{ steps.vars.outputs.passt_version }} (exact Ubuntu and Debian binaries)
           - netavark ${{ steps.vars.outputs.netavark_version }}
           - aardvark-dns ${{ steps.vars.outputs.aardvark_version }}
           - crun ${{ steps.vars.outputs.crun_version }}
@@ -117,6 +120,28 @@ jobs:
           SHA256 checksums are attached as \`SHA256SUMS\`.
           EOF
           )"
+
+  fetch-passt:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned passt .deb packages
+        run: |
+          for origin in ubuntu debian; do
+            for arch in amd64 arm64; do
+              ./scripts/fetch-passt-deb.sh "${origin}" "${arch}" output
+            done
+          done
+      - name: List pinned artifacts
+        run: find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: passt-debs-pinned
+          path: output/*.deb
+          retention-days: 7
+          if-no-files-found: error
 
   build-compiled:
     needs: prepare
@@ -444,6 +469,7 @@ jobs:
   publish:
     needs:
       - prepare
+      - fetch-passt
       - build-compiled
       - build-containers-common
     runs-on: ubuntu-latest
@@ -503,7 +529,8 @@ jobs:
           ## Podman ${PODMAN_VERSION} companion .deb packages
 
           Supporting packages required alongside Podman ${PODMAN_VERSION}, built
-          for amd64 and arm64 (containers-common is \`Architecture: all\`):
+          or pinned for amd64 and arm64 (containers-common is \`Architecture: all\`):
+          - passt ${{ needs.prepare.outputs.passt_version }} (exact Ubuntu and Debian binaries)
           - netavark ${{ needs.prepare.outputs.netavark_version }}
           - aardvark-dns ${{ needs.prepare.outputs.aardvark_version }}
           - crun ${{ needs.prepare.outputs.crun_version }}

@@ -2,15 +2,16 @@
 
 This repository builds current Podman releases and their supporting components
 as installable `.deb` packages for Ubuntu and Debian on `amd64` and `arm64`.
-Every package is built in Docker from pinned upstream sources and distro
-packaging to keep builds isolated and reproducible.
+Source-built packages use Docker, pinned upstream sources, and distro packaging
+to keep builds isolated and reproducible. The companion workflow also includes
+exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
 
 ## Downloads
 
 Builds are published in two release groups:
 
 - [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22) — the main `podman`, `podman-remote`, and `podman-docker` packages.
-- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion) — networking, DNS, runtime, monitoring, configuration, and storage packages: netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage.
+- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion) — networking, DNS, runtime, monitoring, configuration, and storage packages: passt, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage.
 - [All releases](https://github.com/andrewtheguy/podman-package/releases) — the combined chronological GitHub release history.
 
 For a complete Podman 6 installation, download the packages for your distro and
@@ -30,6 +31,12 @@ containers, and their newest releases track the latest features and fixes. The
 distro-provided crun (or runc) and conmon will still run containers. Both are
 built and released here for all targets so you can pull in the current releases
 when you want them.
+
+passt provides the `pasta` user-mode networking backend. The companion release
+includes exact `0.0~git20260611.a9c61ff-1` Ubuntu Launchpad and Debian snapshot
+binaries for `amd64` and `arm64`; every URL and SHA-256 is pinned in
+`packaging/versions.env`. The release asset name identifies the binary's
+`ubuntu` or `debian` origin without changing the package contents.
 
 Podman, the two Rust components, crun, conmon, and containers-storage follow the same
 pattern (distro `debian/` packaging + pinned upstream source + repo-managed
@@ -59,9 +66,11 @@ together (e.g. `apt install ./*.deb`).
 ## Supported Platforms
 
 All compiled packages build for both architectures: `amd64` and `arm64`.
-containers-common is `Architecture: all` (one build per distro). Every product
-is built for all three targets — and on each target Podman 6.0 needs the
-matching netavark, aardvark-dns, and containers-common installed alongside it.
+containers-common is `Architecture: all` (one build per distro). passt is
+provided as exact Ubuntu and Debian binaries for both architectures. Every
+source-built product targets all three distributions — and on each target
+Podman 6.0 needs the matching netavark, aardvark-dns, and containers-common
+installed alongside it.
 
 | Platform | Codename |
 |----------|----------|
@@ -74,9 +83,11 @@ matching netavark, aardvark-dns, and containers-common installed alongside it.
 Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
-- **Build and Release Podman Companion .deb Packages** — builds netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage (the packages the Podman workflow does not cover).
+- **Build and Release Podman Companion .deb Packages** — fetches pinned passt binaries and builds netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage (the packages the Podman workflow does not cover).
 
-Each workflow builds all its platform/architecture combinations in parallel, then publishes a **single unified pre-release** containing every `.deb` from that run plus a combined `SHA256SUMS`:
+Each workflow builds or fetches its platform/architecture inputs, then publishes
+a **single unified pre-release** containing every `.deb` from that run plus a
+combined `SHA256SUMS`:
 
 - Podman: `v<VERSION>-<YYYYMMDD>-<N>`
 - Companions: `podman-extras-<YYYYMMDD>-<N>`
@@ -113,10 +124,19 @@ Examples:
 ./scripts/build-deb.sh containers-storage ubuntu resolute
 ```
 
+passt is intentionally not rebuilt. To fetch and verify one of the exact
+binaries used by the companion workflow:
+
+```bash
+./scripts/fetch-passt-deb.sh ubuntu amd64 output/passt
+./scripts/fetch-passt-deb.sh debian arm64 output/passt
+```
+
 ## Script Layout
 
 - GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman) and `.github/workflows/build-and-release-extras.yml` (companion packages)
 - Host/orchestrator entrypoint: `scripts/build-deb.sh`
+- Pinned passt binary fetcher: `scripts/fetch-passt-deb.sh`
 - Shared host helpers: `scripts/lib/`
 - Shared in-container dispatcher: `scripts/container/build.sh`
 - Product build modules: `scripts/container/products/`
@@ -149,11 +169,12 @@ Per-architecture run behavior:
 
 ## What The Build Does
 
-- Runs entirely in Docker containers.
+- Runs source builds entirely in Docker containers; pinned passt binaries are fetched directly on the GitHub runner.
 - GitHub Actions: uses native `amd64` and `arm64` runners with `docker build` (BuildKit default). All supported distro/arch combinations build in parallel.
 - Local: uses `docker buildx build --platform` for cross-compilation. Architectures run sequentially.
 - Uses `--pull --no-cache` for each build to ensure fresh apt metadata/security updates on every run.
 - Uses pinned upstream inputs from `packaging/versions.env`.
+- Downloads the exact pinned Ubuntu and Debian passt `.deb`s and verifies their SHA-256 hashes and package metadata.
 - Derives Go toolchain version from upstream Podman `go.mod`.
 - Injects distro packaging (`debian/`) into upstream Podman source.
 - Applies repository-managed patch series only (no runtime fallback).
@@ -181,6 +202,13 @@ Pinned upstream input config:
 - `packaging/versions.env`
 
 ```bash
+# passt (exact distro-built binary packages)
+PASST_VERSION=0.0~git20260611.a9c61ff-1
+PASST_UBUNTU_AMD64_SHA256=5437f1c07f3fe95d2eab577c69c0702d4b939e394936c09592b0502d0b0b19c1
+PASST_UBUNTU_ARM64_SHA256=cbd9f3836e3e2845108bb4777e206b01d7bcbd0425107751f2643d96060b7a90
+PASST_DEBIAN_AMD64_SHA256=ac4bee1cf1713e7fdf0bb563da0c1c64fd91a4c9e31b1d180d69b084737269b1
+PASST_DEBIAN_ARM64_SHA256=5111e1039287cbab8ea2b1557bf89296d6b928edabf322d05fa811e8e31871a4
+
 # Podman (Go)
 PODMAN_TAG=v6.0.1
 UPSTREAM_SHA256=4829d7c1423523a6a4d5537dea7968ae7f6c22ed7f1d5f416638fd81c83caa47
@@ -219,6 +247,10 @@ CONTAINERS_STORAGE_ARCHIVE_SHA256=3a0f119a5abb11ff45e49793243278075c5ab5c409dd93
 
 Notes:
 - All orchestrators source this file directly.
+- passt pins four exact binary URLs and hashes: Ubuntu `amd64`/`arm64` from the
+  Launchpad build of `0.0~git20260611.a9c61ff-1`, and Debian `amd64`/`arm64`
+  from the immutable `20260612T203416Z` snapshot. The fetcher verifies the
+  SHA-256 plus the package name, version, and architecture.
 - `PODMAN_TAG` / `NETAVARK_TAG` control upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
   To obtain the checksum for a given tag, download the tarball from GitHub and compute its SHA256:
@@ -303,6 +335,7 @@ Local builds:
 Both methods require network access to:
   - Ubuntu package repositories
   - Debian package repositories
+  - Launchpad and snapshot.debian.org for pinned passt binaries
   - Podman source tarballs on GitHub
   - Go toolchain tarballs on `go.dev`
 
@@ -311,16 +344,16 @@ Both methods require network access to:
 There are two workflows, each triggered manually (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
-- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
+- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (passt, netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
 
-Each workflow run publishes a single unified pre-release containing every `.deb` it built (across all distros) plus a combined `SHA256SUMS`. The Podman, netavark, aardvark-dns, crun, conmon, and containers-storage `.deb`s carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
+Each workflow run publishes a single unified pre-release containing every `.deb` it built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark, aardvark-dns, crun, conmon, and containers-storage carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Release tag formats:
 
 - Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
-- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb`s for every distro.
+- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the passt, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb`s.
 
-Package version format inside generated `.deb`s:
+Package version format inside source-built `.deb`s:
 `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example
 `6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`). GitHub normalizes
 special characters in release asset filenames, so the workflow renames release
@@ -335,18 +368,16 @@ This is a feature-level requirement, not a base Podman package dependency.
 Ubuntu 24.04 (`noble`):
 - Requirement for `pasta --map-host-loopback`: `passt >= 0.0~git20250217.a1e48a0-1`.
 - Ubuntu noble currently provides `passt 0.0~git20240220.1e6f92b-1`, which is below that requirement.
-- For noble hosts that need this feature, install `passt` from Ubuntu `plucky` or newer.
-
-- [`passt` in Ubuntu plucky](https://packages.ubuntu.com/plucky/passt)
-
-To install the latest `passt` regardless of distro release:
-
-- [`passt` in Debian unstable](https://packages.debian.org/source/unstable/passt)
-- [`passt` in Ubuntu (Launchpad)](https://launchpad.net/ubuntu/+source/passt)
+- For noble hosts that need this feature, install the `ubuntu` passt asset from
+  the companion release. It is the exact pinned
+  [`0.0~git20260611.a9c61ff-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20260611.a9c61ff-1).
 
 Debian 13 (`trixie`):
 - No workaround is required.
 - Debian trixie provides `passt 0.0~git20250503.587980c-2`, which satisfies the requirement above.
+- The companion release also provides the newer exact pinned
+  [`0.0~git20260611.a9c61ff-1` Debian forky binary](https://packages.debian.org/forky/passt)
+  from snapshot.debian.org.
 - Quick check:
 
 ```bash

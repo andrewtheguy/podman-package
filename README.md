@@ -410,3 +410,58 @@ If you intentionally curl a missing path, `404` is also a valid connectivity sig
 A timeout or `000` means connectivity failed.
 
 This repository currently builds Podman packages only; it does not build or backport `passt` automatically.
+
+## Known Issue: Rootless IPv6 Publish Drops on Dynamic-Address Hosts
+
+On hosts with a dynamic IPv6 address (SLAAC privacy/temporary addresses, rotating
+delegated prefixes — e.g. WSL instances), rootless containers that publish ports
+over the default `pasta` network can stop receiving inbound IPv6 traffic after
+the host address rotates, until the container is restarted or a static IPv6
+address is configured on the host.
+
+This affects plain `podman run -p ...` and Quadlet units with no `Network=` line:
+rootless containers without an explicit network use `default_rootless_network_cmd`
+from `containers.conf`, which is `pasta` — so these are on the affected path even
+though `--network=pasta` was never written anywhere.
+
+Cause: `pasta` copies the host's addresses into the container namespace once at
+startup and forwards inbound connections with the original destination address
+preserved (no NAT). After the host's dynamic IPv6 rotates, new inbound
+connections arrive addressed to the new host address, which no longer matches
+any address inside the namespace, and are dropped. The host-side wildcard bind
+is not the problem; `pasta` does not track host address changes at runtime.
+
+### Mitigation: `pesto` kernel-level port forwarding (Podman >= 6.1.0)
+
+Podman 6.1.0 adds IPv6 support to the experimental `pesto` rootless port
+forwarder. `pesto` DNATs published ports to the container's stable IP on its
+rootless bridge network instead of preserving the host destination address, and
+binds both `0.0.0.0` and `[::]` when no `HostIP` is given — so host address
+rotation cannot strand the forwarding path.
+
+Requirements:
+
+- Podman >= 6.1.0 (this repository's builds satisfy this; see
+  `packaging/versions.env`).
+- A passt package that ships the `pesto` binary:
+  `passt >= 0^20260507.g1afd4ed`. The pinned companion binary
+  `0.0~git20260611.a9c61ff-1` satisfies this; distro-provided passt on
+  Ubuntu noble and Debian trixie does not.
+- The container must be on a rootless **bridge** network (a named network or a
+  Quadlet `.network` unit referenced via `Network=`). Containers on the plain
+  `pasta` default keep the startup-snapshot behavior described above.
+- `containers.conf` (`[network]` section):
+
+```ini
+[network]
+rootless_port_forwarder = "pasta"
+```
+
+This option is experimental in Podman 6.1.0 and its behavior may change.
+
+Caveat: the pinned passt snapshot (2026-06-11) ships `pesto` but predates
+upstream forwarding-rule and target-address-mapping work from July 2026. Before
+relying on the IPv6 `pesto` path, smoke-test it on the target host: publish a
+port from a container on a rootless bridge network, rotate or remove the host's
+IPv6 address, and confirm inbound IPv6 still reaches the container. If it does
+not, the passt pin needs a bump to a post-July-2026 snapshot.

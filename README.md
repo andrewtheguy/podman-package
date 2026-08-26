@@ -6,6 +6,56 @@ Source-built packages use Docker, pinned upstream sources, and distro packaging
 to keep builds isolated and reproducible. The companion workflow also includes
 exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
 
+## Install via APT (maintainer's personal repository)
+
+> **Disclaimer — this APT repository is only for my own convenience.** It exists
+> so *I* can `apt install` these builds on my own machines. It is not a supported
+> distribution channel for anyone else: packages may change, break, or disappear
+> without notice, the signing key is mine, and I make no promises about uptime or
+> security review. **If you want to use these packages, fork this project and set
+> up your own repository with your own signing key** — see
+> [Hosting Your Own APT Repository](#hosting-your-own-apt-repository). Do not
+> point production systems at my repository.
+
+The repository is served from GitHub Pages at
+<https://andrewtheguy.github.io/podman-package/> and is rebuilt from the latest
+Podman and Companion releases by the **Publish APT Repository** workflow.
+
+```bash
+# 1. Signing key
+sudo mkdir -p /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/podman-package.gpg \
+  https://andrewtheguy.github.io/podman-package/podman-package.gpg
+
+# 2. Repository (DEB822). Use the suite for your distro: noble, resolute, or trixie.
+sudo tee /etc/apt/sources.list.d/podman-package.sources <<'EOF'
+Types: deb
+URIs: https://andrewtheguy.github.io/podman-package
+Suites: noble
+Components: main
+Signed-By: /etc/apt/keyrings/podman-package.gpg
+EOF
+
+# 3. Install
+sudo apt update
+sudo apt install podman passt crun conmon
+```
+
+`podman` pulls in the required companions (netavark, aardvark-dns,
+containers-common, containers-storage) through its versioned `Depends`; `passt`,
+`crun`, and `conmon` are listed explicitly because they are recommended rather
+than required. `podman-remote` and `podman-docker` are also available.
+
+| Suite | Platform | Contents |
+|-------|----------|----------|
+| `noble` | Ubuntu 24.04 | source-built `~noble` packages + the pinned Ubuntu `passt` binary |
+| `resolute` | Ubuntu 26.04 | source-built `~resolute` packages + the pinned Ubuntu `passt` binary |
+| `trixie` | Debian 13 | source-built `~trixie` packages + the pinned Debian `passt` binary |
+
+Every suite carries `amd64` and `arm64`. The suite table lives in
+`packaging/repo/suites`; the signing key fingerprint is printed on the
+repository's index page and in `packaging/repo/pubkey.asc`.
+
 ## Downloads
 
 Builds are published in two release groups:
@@ -80,10 +130,19 @@ installed alongside it.
 
 ## GitHub Actions (Default)
 
-Two workflows are triggered manually from the Actions tab (`workflow_dispatch`):
+Two build workflows are triggered manually from the Actions tab (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
 - **Build and Release Podman Companion .deb Packages** — fetches pinned passt binaries and builds netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage (the packages the Podman workflow does not cover).
+
+A third workflow, **Publish APT Repository** (`.github/workflows/publish-apt-repo.yml`),
+runs automatically after either build workflow succeeds (and can be dispatched
+manually, optionally pinning specific release tags). It downloads the `.deb`
+assets of the latest Podman release and the latest Companion release, assembles
+and signs an APT repository, smoke-installs `podman` from it inside `noble`,
+`resolute`, and `trixie` containers, and deploys the result to GitHub Pages. See
+[Hosting Your Own APT Repository](#hosting-your-own-apt-repository) for the
+one-time setup it needs.
 
 Each workflow builds or fetches its platform/architecture inputs, then publishes
 a **single unified pre-release** containing every `.deb` from that run plus a
@@ -93,6 +152,65 @@ combined `SHA256SUMS`:
 - Companions: `podman-extras-<YYYYMMDD>-<N>`
 
 `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...).
+
+## Hosting Your Own APT Repository
+
+The published repository is tied to my GitHub Pages site and my signing key, so
+to use these packages you run the same pipeline in your own fork. One-time setup:
+
+1. **Fork** this repository and run both build workflows at least once so a
+   Podman release (`v*`) and a Companion release (`podman-extras-*`) exist.
+2. **Generate your own signing key** (never reuse mine):
+
+   ```bash
+   ./scripts/apt-repo-keygen.sh
+   ```
+
+   This writes the private key to `keys/apt-signing-key.private.asc` — the
+   `keys/` directory is gitignored; keep it secret and back it up — and the
+   public key to `packaging/repo/pubkey.asc`, which you **commit**. The publish
+   script refuses to sign with any key other than the one in
+   `packaging/repo/pubkey.asc`, so a fork can never accidentally publish with
+   the upstream key.
+3. **Store the private key** as the `GPG_PRIVATE_KEY` repository secret:
+
+   ```bash
+   gh secret set GPG_PRIVATE_KEY < keys/apt-signing-key.private.asc
+   ```
+
+4. **Enable GitHub Pages** in *Settings → Pages* with source **GitHub Actions**.
+5. **Run the Publish APT Repository workflow** from the Actions tab (leave the
+   release inputs empty to publish the latest releases). From then on it also
+   runs automatically after each successful build workflow.
+
+Your repository is served at `https://<owner>.github.io/<repo>/` with the same
+`noble` / `resolute` / `trixie` suites; the generated index page shows the exact
+`sources` snippet and key fingerprint for your fork. To re-run the assembly
+locally (on a Debian/Ubuntu host or container with `dpkg-dev`, `apt-utils`, and
+`gnupg`):
+
+```bash
+gpg --import keys/apt-signing-key.private.asc
+gh release download <podman-tag> --pattern '*.deb' --dir debs/podman
+gh release download <extras-tag> --pattern '*.deb' --dir debs/extras
+./scripts/build-apt-repo.sh debs repo-output https://<owner>.github.io/<repo>
+./scripts/smoke-apt-repo.sh repo-output      # optional: apt-get install in containers
+```
+
+Repository layout notes:
+
+- Suites are defined in `packaging/repo/suites` (one line per distro codename).
+  Source-built packages are routed by their `~<suite>` version suffix; the
+  pinned `passt` binaries are routed by the `_ubuntu_` / `_debian_` marker in
+  their release asset names to every suite of that family.
+- The pool is partitioned per suite (`pool/<suite>/…`) rather than shared,
+  because the Ubuntu and Debian `passt` binaries have identical package
+  name/version/architecture but different contents.
+- `Release` files carry `Acquire-By-Hash: yes` with `by-hash/` copies of every
+  index, so a half-propagated GitHub Pages deploy cannot produce apt
+  hash-sum mismatches.
+- `scripts/verify-apt-repo.sh` re-checks signatures, `Release` ↔ index hashes,
+  and index ↔ pool hashes before anything is uploaded.
 
 ## Local Builds
 
@@ -134,9 +252,10 @@ binaries used by the companion workflow:
 
 ## Script Layout
 
-- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman) and `.github/workflows/build-and-release-extras.yml` (companion packages)
+- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman), `.github/workflows/build-and-release-extras.yml` (companion packages), and `.github/workflows/publish-apt-repo.yml` (APT repository → GitHub Pages)
 - Host/orchestrator entrypoint: `scripts/build-deb.sh`
 - Pinned passt binary fetcher: `scripts/fetch-passt-deb.sh`
+- APT repository: `scripts/apt-repo-keygen.sh` (signing key), `scripts/build-apt-repo.sh` (assemble + sign), `scripts/verify-apt-repo.sh` (integrity gate), `scripts/smoke-apt-repo.sh` (container install test); config in `packaging/repo/suites` and `packaging/repo/pubkey.asc`; private key in gitignored `keys/`
 - Shared host helpers: `scripts/lib/`
 - Shared in-container dispatcher: `scripts/container/build.sh`
 - Product build modules: `scripts/container/products/`
@@ -328,6 +447,9 @@ Where:
 GitHub Actions (default):
 - Repository with Actions enabled and `contents: write` permission for the workflow.
 - Native `arm64` runners require a GitHub Team/Enterprise plan or a public repository.
+- For the APT repository: GitHub Pages enabled with source "GitHub Actions", the
+  `GPG_PRIVATE_KEY` secret, and your own `packaging/repo/pubkey.asc` (see
+  [Hosting Your Own APT Repository](#hosting-your-own-apt-repository)).
 
 Local builds:
 - Docker with Buildx support.
@@ -341,10 +463,14 @@ Both methods require network access to:
 
 ## Releases
 
-There are two workflows, each triggered manually (`workflow_dispatch`):
+There are two build workflows, each triggered manually (`workflow_dispatch`):
 
 - **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
 - **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (passt, netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
+
+After either succeeds, **Publish APT Repository** republishes the GitHub Pages
+APT repository from the latest release of each group (see
+[Install via APT](#install-via-apt-maintainers-personal-repository)).
 
 Each workflow run publishes a single unified pre-release containing every `.deb` it built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark, aardvark-dns, crun, conmon, and containers-storage carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 

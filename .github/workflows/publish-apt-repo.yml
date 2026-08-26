@@ -1,0 +1,143 @@
+name: Publish APT Repository
+
+# Assembles a signed APT repository from the .deb assets of the latest Podman
+# release and the latest Companion release, smoke-installs from it, and deploys
+# it to GitHub Pages. Runs automatically after either build workflow succeeds
+# and can be dispatched manually (optionally pinning specific release tags).
+#
+# Requirements (see README "Hosting Your Own APT Repository"):
+#   - repository secret GPG_PRIVATE_KEY: the armored private key matching
+#     packaging/repo/pubkey.asc (generate both with scripts/apt-repo-keygen.sh)
+#   - GitHub Pages enabled with source "GitHub Actions"
+
+on:
+  workflow_dispatch:
+    inputs:
+      podman_release:
+        description: 'Podman release tag to publish (e.g. v6.1.0-20260813-1). Empty = latest published v* release.'
+        required: false
+        type: string
+        default: ''
+      extras_release:
+        description: 'Companion release tag to publish (e.g. podman-extras-20260720-1). Empty = latest published podman-extras-* release.'
+        required: false
+        type: string
+        default: ''
+      skip_smoke_test:
+        description: 'Skip the apt-get install smoke test against the assembled repository'
+        required: false
+        type: boolean
+        default: false
+  workflow_run:
+    workflows:
+      - Build and Release Podman .deb Packages
+      - Build and Release Podman Companion .deb Packages
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # On workflow_run only publish after a successful build; a failed build must
+    # never trigger a republish.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tags
+        id: releases
+        env:
+          PODMAN_INPUT: ${{ inputs.podman_release }}
+          EXTRAS_INPUT: ${{ inputs.extras_release }}
+        run: |
+          set -euo pipefail
+          # pick <tag-regex> <requested-tag>: the requested tag if given (must
+          # exist), otherwise the most recently published non-draft release
+          # whose tag matches the regex.
+          pick() {
+            local pattern="$1" requested="$2"
+            if [[ -n "${requested}" ]]; then
+              gh release view "${requested}" --repo "${GITHUB_REPOSITORY}" --json tagName --jq .tagName
+            else
+              gh release list --repo "${GITHUB_REPOSITORY}" --exclude-drafts --limit 1000 \
+                --json tagName,publishedAt \
+                --jq "map(select(.tagName | test(\"${pattern}\"))) | sort_by(.publishedAt) | last | .tagName // empty"
+            fi
+          }
+          PODMAN_TAG=$(pick '^v[0-9]' "${PODMAN_INPUT}")
+          EXTRAS_TAG=$(pick '^podman-extras-' "${EXTRAS_INPUT}")
+          [[ -n "${PODMAN_TAG}" ]] || { echo "::error::no published Podman release (v*) found"; exit 1; }
+          [[ -n "${EXTRAS_TAG}" ]] || { echo "::error::no published Companion release (podman-extras-*) found"; exit 1; }
+          echo "podman_tag=${PODMAN_TAG}" >> "$GITHUB_OUTPUT"
+          echo "extras_tag=${EXTRAS_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Publishing Podman release ${PODMAN_TAG} + Companion release ${EXTRAS_TAG}"
+
+      - name: Download release .deb assets
+        run: |
+          set -euo pipefail
+          gh release download "${{ steps.releases.outputs.podman_tag }}" \
+            --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir debs/podman
+          gh release download "${{ steps.releases.outputs.extras_tag }}" \
+            --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir debs/extras
+          echo "--- downloaded ---"
+          find debs -type f -name '*.deb' | sort
+
+      - name: Install repository tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils gnupg
+
+      - name: Import signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY}" ]]; then
+            echo "::error::The GPG_PRIVATE_KEY secret is not set. Generate a key with scripts/apt-repo-keygen.sh, commit packaging/repo/pubkey.asc and run: gh secret set GPG_PRIVATE_KEY < keys/apt-signing-key.private.asc"
+            exit 1
+          fi
+          GNUPGHOME="${RUNNER_TEMP}/gnupg"
+          mkdir -m 700 "${GNUPGHOME}"
+          echo "GNUPGHOME=${GNUPGHOME}" >> "$GITHUB_ENV"
+          export GNUPGHOME
+          printf '%s\n' "${GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+          gpg --batch --list-secret-keys --keyid-format long
+
+      - name: Build and sign repository
+        env:
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_URL="https://${OWNER}.github.io/${{ github.event.repository.name }}"
+          ./scripts/build-apt-repo.sh debs repo-output "${REPO_URL}"
+          echo "--- repository tree ---"
+          find repo-output -type f -not -path '*/by-hash/*' | sort
+
+      # Installs podman + companions from the assembled repo inside real
+      # distro containers; a repository that apt cannot consume never deploys.
+      - name: Smoke test — apt-get install from the assembled repository
+        if: ${{ !inputs.skip_smoke_test }}
+        run: ./scripts/smoke-apt-repo.sh repo-output
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo-output/
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

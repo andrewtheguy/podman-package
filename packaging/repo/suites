@@ -1,0 +1,15 @@
+# APT suites published to GitHub Pages by scripts/build-apt-repo.sh.
+#
+# One line per supported distro codename, whitespace separated:
+#   <suite>  <family>  <description...>
+#
+# <suite>  is the APT suite/codename served under dists/<suite>/ and must equal
+#          the distro codename used in the package version suffix (`~<suite>`),
+#          which is how source-built .debs are routed to their suite.
+# <family> is `ubuntu` or `debian`. Binaries that are pinned per distro family
+#          rather than built per suite (the passt .debs, whose release asset
+#          names carry `_ubuntu_` / `_debian_`) are published to every suite of
+#          that family.
+noble     ubuntu  Ubuntu 24.04 (noble)
+resolute  ubuntu  Ubuntu 26.04 (resolute)
+trixie    debian  Debian 13 (trixie)

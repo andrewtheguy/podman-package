@@ -4,7 +4,6 @@
 #   private key -> keys/apt-signing-key.private.asc   (gitignored; upload it as
 #                                                      the GPG_PRIVATE_KEY secret)
 #   public key  -> packaging/repo/pubkey.asc           (commit it; served to users)
-#   fingerprint -> keys/apt-signing-key.fingerprint
 #
 # Usage: scripts/apt-repo-keygen.sh [--force]
 #
@@ -25,7 +24,6 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 KEYS_DIR="${ROOT_DIR}/keys"
 PRIVATE_KEY="${KEYS_DIR}/apt-signing-key.private.asc"
-FINGERPRINT_FILE="${KEYS_DIR}/apt-signing-key.fingerprint"
 PUBKEY="${ROOT_DIR}/packaging/repo/pubkey.asc"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -87,7 +85,6 @@ mkdir -p "${KEYS_DIR}" "$(dirname "${PUBKEY}")"
 (
   umask 077
   gpg --batch --yes --armor --export-secret-keys "${FPR}" > "${PRIVATE_KEY}"
-  echo "${FPR}" > "${FINGERPRINT_FILE}"
 )
 gpg --batch --yes --armor --export "${FPR}" > "${PUBKEY}"
 
@@ -97,6 +94,9 @@ Generated signing key ${FPR}
 
   private key : ${PRIVATE_KEY#"${ROOT_DIR}"/}   (gitignored — keep it secret, back it up)
   public key  : ${PUBKEY#"${ROOT_DIR}"/}         (commit this)
+
+The fingerprint is public and is not stored separately; show it any time with:
+  gpg --show-keys ${PUBKEY#"${ROOT_DIR}"/}
 
 Next steps:
   1. Store the private key as a repository secret for the publish workflow:

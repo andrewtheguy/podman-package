@@ -172,11 +172,32 @@ to use these packages you run the same pipeline in your own fork. One-time setup
    script refuses to sign with any key other than the one in
    `packaging/repo/pubkey.asc`, so a fork can never accidentally publish with
    the upstream key.
-3. **Store the private key** as the `GPG_PRIVATE_KEY` repository secret:
+3. **Store the private key** as the `GPG_PRIVATE_KEY` repository secret. From
+   inside your fork's checkout, with the [GitHub CLI](https://cli.github.com/)
+   logged in (`gh auth status`):
 
    ```bash
    gh secret set GPG_PRIVATE_KEY < keys/apt-signing-key.private.asc
+   # or, from anywhere:
+   gh secret set GPG_PRIVATE_KEY --repo <owner>/<repo> < keys/apt-signing-key.private.asc
    ```
+
+   `gh secret set` reads the armored private key from stdin, fetches the
+   repository's public encryption key from the GitHub API, encrypts the value
+   locally (libsodium sealed box), and uploads only the ciphertext. GitHub never
+   returns a secret's value — `gh secret list` shows just the name and update
+   time — so keep `keys/` as your own copy. The value can only be used by
+   workflows in this repository, as `${{ secrets.GPG_PRIVATE_KEY }}`; the publish
+   workflow pipes it into `gpg --import` inside a throwaway `GNUPGHOME` and the
+   Actions log masks it.
+
+   Without the CLI: *Settings → Secrets and variables → Actions → New repository
+   secret*, name `GPG_PRIVATE_KEY`, and paste the full contents of
+   `keys/apt-signing-key.private.asc` (including the `-----BEGIN/END PGP PRIVATE
+   KEY BLOCK-----` lines) as the value.
+
+   Verify with `gh secret list`; the workflow fails at its "Import signing key"
+   step with an explanatory error if the secret is missing.
 
 4. **Enable GitHub Pages** in *Settings → Pages* with source **GitHub Actions**.
 5. **Run the Publish APT Repository workflow** from the Actions tab (leave the
@@ -196,6 +217,60 @@ gh release download <extras-tag> --pattern '*.deb' --dir debs/extras
 ./scripts/build-apt-repo.sh debs repo-output https://<owner>.github.io/<repo>
 ./scripts/smoke-apt-repo.sh repo-output      # optional: apt-get install in containers
 ```
+
+### Signing Key
+
+The repository is trusted through one OpenPGP key pair created by
+`scripts/apt-repo-keygen.sh`:
+
+| Half | Location | Role |
+|------|----------|------|
+| Private | `keys/apt-signing-key.private.asc` (gitignored) and the `GPG_PRIVATE_KEY` repository secret | Signs each suite's `Release` file during publish |
+| Public | `packaging/repo/pubkey.asc` (committed), served as `<repo-url>/podman-package.gpg` and `.asc` | Installed by clients under `/etc/apt/keyrings/` and referenced by `Signed-By:` |
+
+**What is signed.** Only `dists/<suite>/Release` is signed (as `InRelease`, and
+detached as `Release.gpg`). `Release` lists the size and SHA256/SHA512 of every
+`Packages` index, and each `Packages` stanza lists the size and SHA256 of its
+`.deb`. That hash chain — signed `InRelease` → `Packages` → `.deb` — is what apt
+verifies on `apt update` and `apt install`, so a single signature covers the whole
+suite and any modified byte anywhere (on GitHub Pages, in transit, in a CDN
+cache) makes apt reject the download. The `.deb` files themselves carry no
+signature.
+
+**Key properties.** RSA-4096, sign-only, **no passphrase** (the workflow must use
+it non-interactively; a passphrase would just be a second secret stored beside
+the first) and **no expiry** (an expiring key would break every client's
+`apt update` on the expiry date). Protection therefore rests entirely on
+keeping the private half out of git and out of logs: `keys/` is gitignored, the
+keygen script refuses to run if it is not, and in CI the key is imported into a
+throwaway `GNUPGHOME` under `$RUNNER_TEMP` that exists only for that job.
+
+**Which key gets used.** `scripts/build-apt-repo.sh` reads the fingerprint from
+the committed `packaging/repo/pubkey.asc` and signs with exactly that key; if the
+matching secret key is not in the keyring it aborts. A fork that keeps the
+upstream `pubkey.asc` but supplies its own secret fails loudly instead of
+publishing a repository nobody can verify.
+
+**Backup.** The private key exists only on the machine that generated it and in
+the GitHub secret (which cannot be read back). Store `keys/` somewhere safe
+(password manager, encrypted backup). Losing it does not affect existing
+installs, but no further publishes can be signed until you rotate.
+
+**Rotation (lost, leaked, or scheduled).**
+
+```bash
+./scripts/apt-repo-keygen.sh --force                          # new pair; overwrites keys/ and pubkey.asc
+gh secret set GPG_PRIVATE_KEY < keys/apt-signing-key.private.asc
+git commit -am "chore: rotate APT signing key" && git push     # publish the new public key
+gh workflow run "Publish APT Repository"                       # re-sign the repository
+```
+
+Every client must then re-download the keyring
+(`sudo curl -fsSL -o /etc/apt/keyrings/podman-package.gpg <repo-url>/podman-package.gpg`);
+until they do, `apt update` fails with `NO_PUBKEY` for this source. That is the
+intended behavior — rotation is the only way to revoke trust in a leaked key,
+since the key has no expiry. If the key leaked, rotate immediately: anyone
+holding it could publish packages that your clients would trust.
 
 Repository layout notes:
 

@@ -1,9 +1,11 @@
 name: Publish APT Repository
 
-# Assembles a signed APT repository from the .deb assets of the latest Podman
-# release and the latest Companion release, smoke-installs from it, and deploys
-# it to GitHub Pages. Runs automatically after either build workflow succeeds
-# and can be dispatched manually (optionally pinning specific release tags).
+# Assembles a signed APT repository from the .deb assets of the most recent
+# Podman releases and Companion releases (keep_releases of each, default 3, so
+# clients holding a slightly stale index still find their .debs and older
+# versions stay pinnable), smoke-installs from it, and deploys it to GitHub
+# Pages. Runs automatically after either build workflow succeeds and can be
+# dispatched manually (optionally pinning specific release tags).
 #
 # Requirements (see README "Hosting Your Own APT Repository"):
 #   - repository secret GPG_PRIVATE_KEY: the armored private key matching
@@ -13,13 +15,18 @@ name: Publish APT Repository
 on:
   workflow_dispatch:
     inputs:
+      keep_releases:
+        description: 'How many of the most recent Podman releases and Companion releases to publish (each). Older versions stay installable/pinnable until they rotate out.'
+        required: false
+        type: number
+        default: 3
       podman_release:
-        description: 'Podman release tag to publish (e.g. v6.1.0-20260813-1). Empty = latest published v* release.'
+        description: 'Publish exactly this Podman release tag (e.g. v6.1.0-20260813-1) instead of the keep_releases most recent v* releases.'
         required: false
         type: string
         default: ''
       extras_release:
-        description: 'Companion release tag to publish (e.g. podman-extras-20260720-1). Empty = latest published podman-extras-* release.'
+        description: 'Publish exactly this Companion release tag (e.g. podman-extras-20260720-1) instead of the keep_releases most recent podman-extras-* releases.'
         required: false
         type: string
         default: ''
@@ -62,11 +69,14 @@ jobs:
         env:
           PODMAN_INPUT: ${{ inputs.podman_release }}
           EXTRAS_INPUT: ${{ inputs.extras_release }}
+          KEEP_INPUT: ${{ inputs.keep_releases }}
         run: |
           set -euo pipefail
-          # pick <tag-regex> <requested-tag>: the requested tag if given (must
-          # exist), otherwise the most recently published non-draft release
-          # whose tag matches the regex.
+          KEEP="${KEEP_INPUT:-3}"
+          [[ "${KEEP}" =~ ^[1-9][0-9]*$ ]] || { echo "::error::keep_releases must be a positive integer, got '${KEEP}'"; exit 1; }
+          # pick <tag-regex> <requested-tag>: exactly the requested tag if given
+          # (must exist), otherwise the KEEP most recently published non-draft
+          # releases whose tag matches the regex, newest first, one per line.
           pick() {
             local pattern="$1" requested="$2"
             if [[ -n "${requested}" ]]; then
@@ -74,26 +84,33 @@ jobs:
             else
               gh release list --repo "${GITHUB_REPOSITORY}" --exclude-drafts --limit 1000 \
                 --json tagName,publishedAt \
-                --jq "map(select(.tagName | test(\"${pattern}\"))) | sort_by(.publishedAt) | last | .tagName // empty"
+                --jq "map(select(.tagName | test(\"${pattern}\"))) | sort_by(.publishedAt) | reverse | .[:${KEEP}] | .[].tagName"
             fi
           }
-          PODMAN_TAG=$(pick '^v[0-9]' "${PODMAN_INPUT}")
-          EXTRAS_TAG=$(pick '^podman-extras-' "${EXTRAS_INPUT}")
-          [[ -n "${PODMAN_TAG}" ]] || { echo "::error::no published Podman release (v*) found"; exit 1; }
-          [[ -n "${EXTRAS_TAG}" ]] || { echo "::error::no published Companion release (podman-extras-*) found"; exit 1; }
-          echo "podman_tag=${PODMAN_TAG}" >> "$GITHUB_OUTPUT"
-          echo "extras_tag=${EXTRAS_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Publishing Podman release ${PODMAN_TAG} + Companion release ${EXTRAS_TAG}"
+          PODMAN_TAGS=$(pick '^v[0-9]' "${PODMAN_INPUT}" | xargs)
+          EXTRAS_TAGS=$(pick '^podman-extras-' "${EXTRAS_INPUT}" | xargs)
+          [[ -n "${PODMAN_TAGS}" ]] || { echo "::error::no published Podman release (v*) found"; exit 1; }
+          [[ -n "${EXTRAS_TAGS}" ]] || { echo "::error::no published Companion release (podman-extras-*) found"; exit 1; }
+          echo "podman_tags=${PODMAN_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "extras_tags=${EXTRAS_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Podman releases    (newest first): ${PODMAN_TAGS}"
+          echo "Companion releases (newest first): ${EXTRAS_TAGS}"
 
       - name: Download release .deb assets
+        env:
+          PODMAN_TAGS: ${{ steps.releases.outputs.podman_tags }}
+          EXTRAS_TAGS: ${{ steps.releases.outputs.extras_tags }}
         run: |
           set -euo pipefail
-          gh release download "${{ steps.releases.outputs.podman_tag }}" \
-            --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir debs/podman
-          gh release download "${{ steps.releases.outputs.extras_tag }}" \
-            --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir debs/extras
+          for tag in ${PODMAN_TAGS}; do
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/podman/${tag}"
+          done
+          for tag in ${EXTRAS_TAGS}; do
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/extras/${tag}"
+          done
           echo "--- downloaded ---"
           find debs -type f -name '*.deb' | sort
+          du -sh debs
 
       - name: Install repository tooling
         run: |

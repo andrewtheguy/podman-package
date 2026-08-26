@@ -4,8 +4,14 @@
 # Usage: scripts/build-apt-repo.sh <debs-dir> <output-dir> <repo-url>
 #
 #   <debs-dir>    Directory holding the .deb files to publish (searched
-#                 recursively) — normally every .deb from the latest Podman
-#                 release plus the latest Companion release.
+#                 recursively) — normally every .deb from the most recent few
+#                 Podman releases plus the most recent few Companion releases.
+#                 Several versions of a package may be present; all of them are
+#                 indexed (dpkg-scanpackages --multiversion) so apt installs the
+#                 newest while older ones remain downloadable and pinnable. A
+#                 .deb that appears more than once with identical content (the
+#                 pinned passt binary reused across Companion releases) is kept
+#                 once; the same filename with different content is an error.
 #   <output-dir>  Repository root to create. Must not exist or must be empty.
 #   <repo-url>    Public base URL of the repository, e.g.
 #                 https://andrewtheguy.github.io/podman-package (only used in
@@ -151,7 +157,12 @@ while IFS= read -r -d '' deb; do
 
   for s in "${targets[@]}"; do
     dest=$(pool_path "${s}" "${pkg}" "${ver}" "${arch}")
-    [[ -e ${dest} ]] && die "duplicate package in suite ${s}: ${dest} (from ${deb})"
+    if [[ -e ${dest} ]]; then
+      cmp -s "${deb}" "${dest}" \
+        || die "conflicting package in suite ${s}: ${dest} already exists with different content (from ${deb})"
+      printf '  %-9s %s (identical copy, skipped)\n' "${s}" "$(basename "${dest}")"
+      continue
+    fi
     mkdir -p "$(dirname "${dest}")"
     cp "${deb}" "${dest}"
     printf '  %-9s %s\n' "${s}" "$(basename "${dest}")"
@@ -179,8 +190,9 @@ for s in "${SUITES[@]}"; do
   for arch in "${ARCHES[@]}"; do
     dir="dists/${s}/main/binary-${arch}"
     mkdir -p "${dir}"
-    # --arch <arch> scans *_<arch>.deb and *_all.deb only.
-    dpkg-scanpackages --arch "${arch}" "pool/${s}" > "${dir}/Packages"
+    # --arch <arch> scans *_<arch>.deb and *_all.deb only; --multiversion keeps
+    # every version of a package in the index instead of only the newest.
+    dpkg-scanpackages --multiversion --arch "${arch}" "pool/${s}" > "${dir}/Packages"
     gzip -9n < "${dir}/Packages" > "${dir}/Packages.gz"
     printf 'Archive: %s\nOrigin: %s\nLabel: %s\nComponent: main\nArchitecture: %s\n' \
       "${s}" "${ORIGIN}" "${ORIGIN}" "${arch}" > "${dir}/Release"
@@ -285,6 +297,9 @@ sudo apt install podman podman-remote podman-docker netavark aardvark-dns \\
   golang-github-containers-common containers-storage crun conmon passt</pre>
 <p>Signing key: <a href="${KEYRING_NAME}.gpg">${KEYRING_NAME}.gpg</a> (binary keyring) ·
 <a href="${KEYRING_NAME}.asc">${KEYRING_NAME}.asc</a> (armored) · fingerprint <code>${FPR}</code></p>
+<p>Each suite carries the most recent few releases of every package; apt installs the
+newest, and older versions stay downloadable (and pinnable with
+<code>apt install podman=&lt;version&gt;</code>) until they rotate out.</p>
 <h2>Suites</h2>
 HTML
   for s in "${SUITES[@]}"; do
@@ -298,7 +313,8 @@ HTML
         /^Architecture:/ { a=$2 }
         /^[[:space:]]*$/ { if (p!="") print p "\t" v "\t" a; p=v=a="" }
         END              { if (p!="") print p "\t" v "\t" a }' "dists/${s}/main/binary-${arch}/Packages"
-    done | sort -u | awk -F'\t' '{printf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n", $1, $2, $3}'
+    done | sort -u | sort -t "$(printf '\t')" -k1,1 -k2,2Vr -k3,3 \
+         | awk -F'\t' '{printf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n", $1, $2, $3}'
     echo "</table>"
   done
   echo "<p>Generated $(date -u +'%Y-%m-%d %H:%M UTC').</p>"

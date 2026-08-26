@@ -18,8 +18,11 @@ exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
 > point production systems at my repository.
 
 The repository is served from GitHub Pages at
-<https://andrewtheguy.github.io/podman-package/> and is rebuilt from the latest
-Podman and Companion releases by the **Publish APT Repository** workflow.
+<https://andrewtheguy.github.io/podman-package/> and is rebuilt from the three
+most recent Podman releases and the three most recent Companion releases by the
+**Publish APT Repository** workflow. apt installs the newest version; the older
+ones stay downloadable — so a slightly stale `apt update` still resolves — and
+pinnable (`sudo apt install podman=6.0.1+20260709-1~noble`) until they rotate out.
 
 ```bash
 # 1. Signing key
@@ -153,10 +156,14 @@ Two build workflows are triggered manually from the Actions tab (`workflow_dispa
 
 A third workflow, **Publish APT Repository** (`.github/workflows/publish-apt-repo.yml`),
 runs automatically after either build workflow succeeds (and can be dispatched
-manually, optionally pinning specific release tags). It downloads the `.deb`
-assets of the latest Podman release and the latest Companion release, assembles
-and signs an APT repository, smoke-installs `podman` from it inside `noble`,
-`resolute`, and `trixie` containers, and deploys the result to GitHub Pages. See
+manually). It downloads the `.deb` assets of the `keep_releases` most recent
+Podman releases and Companion releases (default 3 of each; a dispatch can instead
+pin exactly one `podman_release` / `extras_release` tag), assembles and signs an
+APT repository with every downloaded version indexed, smoke-installs `podman`
+from it inside `noble`, `resolute`, and `trixie` containers, and deploys the
+result to GitHub Pages. Each publish replaces the whole site, so a version is
+gone once it falls outside the retention window — the GitHub Release itself
+keeps every `.deb` forever. See
 [Hosting Your Own APT Repository](#hosting-your-own-apt-repository) for the
 one-time setup it needs.
 
@@ -224,15 +231,25 @@ Your repository is served at `https://<owner>.github.io/<repo>/` with the same
 `noble` / `resolute` / `trixie` suites; the generated index page shows the exact
 `sources` snippet and key fingerprint for your fork. To re-run the assembly
 locally (on a Debian/Ubuntu host or container with `dpkg-dev`, `apt-utils`, and
-`gnupg`):
+`gnupg`), download as many releases as you want retained — every `.deb` under
+the input directory is indexed:
 
 ```bash
 gpg --import keys/apt-signing-key.private.asc
-gh release download <podman-tag> --pattern '*.deb' --dir debs/podman
-gh release download <extras-tag> --pattern '*.deb' --dir debs/extras
+for tag in <podman-tag-1> <podman-tag-2> <podman-tag-3>; do
+  gh release download "$tag" --pattern '*.deb' --dir "debs/podman/$tag"
+done
+for tag in <extras-tag-1> <extras-tag-2> <extras-tag-3>; do
+  gh release download "$tag" --pattern '*.deb' --dir "debs/extras/$tag"
+done
 ./scripts/build-apt-repo.sh debs repo-output https://<owner>.github.io/<repo>
 ./scripts/smoke-apt-repo.sh repo-output      # optional: apt-get install in containers
 ```
+
+Retention is a size trade-off: one Podman release plus one Companion release is
+roughly 215 MB across all suites and architectures, so the default of three each
+keeps the site around 650 MB, under GitHub Pages' ~1 GB guideline. Raise
+`keep_releases` with care.
 
 ### Signing Key
 
@@ -294,6 +311,10 @@ Repository layout notes:
   Source-built packages are routed by their `~<suite>` version suffix; the
   pinned `passt` binaries are routed by the `_ubuntu_` / `_debian_` marker in
   their release asset names to every suite of that family.
+- Every version found is indexed (`dpkg-scanpackages --multiversion`). A `.deb`
+  that recurs across releases with identical content (the pinned `passt`
+  binary) is stored once; the same filename with different content aborts the
+  publish.
 - The pool is partitioned per suite (`pool/<suite>/…`) rather than shared,
   because the Ubuntu and Debian `passt` binaries have identical package
   name/version/architecture but different contents.

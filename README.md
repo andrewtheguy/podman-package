@@ -44,7 +44,23 @@ sudo apt install podman passt crun conmon
 `podman` pulls in the required companions (netavark, aardvark-dns,
 containers-common, containers-storage) through its versioned `Depends`; `passt`,
 `crun`, and `conmon` are listed explicitly because they are recommended rather
-than required. `podman-remote` and `podman-docker` are also available.
+than required.
+
+To install every package the repository publishes (the ten below are the full
+set for each suite):
+
+```bash
+sudo apt install \
+  podman podman-remote podman-docker \
+  netavark aardvark-dns golang-github-containers-common containers-storage \
+  crun conmon passt
+```
+
+`podman-remote` is the client-only binary and `podman-docker` provides a
+`docker` command that wraps Podman (it `Conflicts` with `docker.io` and
+`docker-ce-cli`, so leave it out on hosts running Docker). To upgrade an existing
+install after a new publish, `sudo apt update && sudo apt upgrade` is enough —
+every package is versioned above its distro counterpart.
 
 | Suite | Platform | Contents |
 |-------|----------|----------|

@@ -278,7 +278,11 @@ Signed-By: /etc/apt/keyrings/${KEYRING_NAME}.gpg
 EOF
 
 sudo apt update
-sudo apt install podman passt crun conmon</pre>
+sudo apt install podman passt crun conmon          # podman pulls in the required companions
+
+# or everything the repository publishes:
+sudo apt install podman podman-remote podman-docker netavark aardvark-dns \\
+  golang-github-containers-common containers-storage crun conmon passt</pre>
 <p>Signing key: <a href="${KEYRING_NAME}.gpg">${KEYRING_NAME}.gpg</a> (binary keyring) ·
 <a href="${KEYRING_NAME}.asc">${KEYRING_NAME}.asc</a> (armored) · fingerprint <code>${FPR}</code></p>
 <h2>Suites</h2>

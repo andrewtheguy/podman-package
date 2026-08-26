@@ -1,0 +1,1 @@
+no backward compatibility, legacy code, or deprecated features because it is a personal project

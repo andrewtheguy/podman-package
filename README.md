@@ -81,7 +81,12 @@ sudo apt install \
 `docker` command that wraps Podman (it `Conflicts` with `docker.io` and
 `docker-ce-cli`, so leave it out on hosts running Docker). To upgrade an existing
 install after a new publish, `sudo apt update && sudo apt upgrade` is enough —
-every package is versioned above its distro counterpart.
+every package is versioned above its distro counterpart. This also moves a host
+from the distro's podman to this repository's. Note that plain
+`apt-get upgrade` **holds podman back** in that case, because the new podman
+depends on packages the distro never installed (containers-storage, and on
+noble netavark/aardvark-dns); use `apt upgrade`, `apt-get upgrade --with-new-pkgs`,
+or `apt full-upgrade` instead.
 
 | Suite | Platform | Contents |
 |-------|----------|----------|

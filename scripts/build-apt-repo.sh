@@ -5,12 +5,12 @@
 #
 #   <debs-dir>    Directory holding the .deb files to publish (searched
 #                 recursively) — normally every .deb from the most recent few
-#                 Podman releases plus the most recent few Companion releases.
+#                 main-* and extra-* component releases.
 #                 Several versions of a package may be present; all of them are
 #                 indexed (dpkg-scanpackages --multiversion) so apt installs the
 #                 newest while older ones remain downloadable and pinnable. A
 #                 .deb that appears more than once with identical content (the
-#                 pinned passt binary reused across Companion releases) is kept
+#                 pinned passt binary reused across extra releases) is kept
 #                 once; the same filename with different content is an error.
 #   <output-dir>  Repository root to create. Must not exist or must be empty.
 #   <repo-url>    Public base URL of the repository, e.g.
@@ -23,6 +23,8 @@
 #                 must already be imported into the GnuPG keyring ($GNUPGHOME);
 #                 the script refuses to sign with any other key.
 #   SUITES_FILE   Suite table (default: packaging/repo/suites).
+#   COMPONENTS_FILE
+#                 Package -> component table (default: packaging/repo/components).
 #   KEYRING_NAME  Basename of the keyring files served at the repo root
 #                 (default: podman-package -> podman-package.gpg / .asc).
 #   ORIGIN        Release Origin/Label (default: podman-package).
@@ -35,12 +37,22 @@
 #     <KEYRING_NAME>.gpg               binary keyring for `Signed-By:`
 #     <KEYRING_NAME>.asc               the same key, ASCII-armored
 #     dists/<suite>/{InRelease,Release,Release.gpg}
-#     dists/<suite>/main/binary-<arch>/{Packages,Packages.gz,Release,by-hash/}
-#     pool/<suite>/main/<p>/<package>/<package>_<version>_<arch>.deb
+#     dists/<suite>/<component>/binary-<arch>/{Packages,Packages.gz,Release,by-hash/}
+#     pool/<suite>/<component>/<p>/<package>/<package>_<version>_<arch>.deb
 #
 # The pool is partitioned per suite (unlike reprepro's single shared pool)
-# because the companion release ships two different passt binaries — one
-# Ubuntu, one Debian — under the same package name, version and architecture.
+# because the extra release ships two different passt binaries — one Ubuntu,
+# one Debian — under the same package name, version and architecture.
+#
+# Components (packaging/repo/components, keyed by package name; the build
+# workflow releases one component per run, but routing never trusts the
+# release — only the package name):
+#   main   podman and the companions its versioned Depends require; a client
+#          with only this component gets a complete, working Podman.
+#   extra  optional newer builds (passt, crun, conmon) whose distro versions
+#          already satisfy podman's dependencies.
+# Every suite publishes every component; a .deb whose package name is not in
+# the table is an error.
 #
 # Routing of a .deb to suites:
 #   1. version ends in `~<suite>`            -> that suite (source-built packages)
@@ -64,6 +76,7 @@ REPO_URL=${3%/}
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PUBKEY_FILE=${PUBKEY_FILE:-${ROOT_DIR}/packaging/repo/pubkey.asc}
 SUITES_FILE=${SUITES_FILE:-${ROOT_DIR}/packaging/repo/suites}
+COMPONENTS_FILE=${COMPONENTS_FILE:-${ROOT_DIR}/packaging/repo/components}
 KEYRING_NAME=${KEYRING_NAME:-podman-package}
 ORIGIN=${ORIGIN:-podman-package}
 ARCHES=(amd64 arm64)
@@ -79,6 +92,7 @@ done
 [[ -d ${DEBS_DIR} ]] || die "debs directory not found: ${DEBS_DIR}"
 [[ -f ${PUBKEY_FILE} ]] || die "public key not found: ${PUBKEY_FILE} — generate one with scripts/apt-repo-keygen.sh"
 [[ -f ${SUITES_FILE} ]] || die "suites file not found: ${SUITES_FILE}"
+[[ -f ${COMPONENTS_FILE} ]] || die "components file not found: ${COMPONENTS_FILE}"
 if [[ -e ${OUTPUT_DIR} ]] && [[ -n $(ls -A "${OUTPUT_DIR}") ]]; then
   die "output directory exists and is not empty: ${OUTPUT_DIR}"
 fi
@@ -125,12 +139,30 @@ done < "${SUITES_FILE}"
 log "Suites: ${SUITES[*]}"
 
 # --------------------------------------------------------------------------
-# Pool: copy every .deb into pool/<suite>/main/<p>/<package>/
+# Components: package name -> component, in table order
 # --------------------------------------------------------------------------
-pool_path() { # <suite> <package> <version> <arch>
-  local suite=$1 pkg=$2 ver=${3#*:} arch=$4 prefix
+COMPONENTS=()
+declare -A PKG_COMPONENT=()
+while read -r pkg comp _; do
+  [[ -z ${pkg} || ${pkg} == \#* ]] && continue
+  [[ -n ${comp} && ${comp} =~ ^[a-z][a-z0-9-]*$ ]] \
+    || die "malformed line in ${COMPONENTS_FILE}: '${pkg} ${comp}'"
+  [[ -z ${PKG_COMPONENT[${pkg}]:-} ]] || die "package ${pkg} listed twice in ${COMPONENTS_FILE}"
+  PKG_COMPONENT[${pkg}]=${comp}
+  found=0
+  for c in "${COMPONENTS[@]}"; do [[ ${c} == "${comp}" ]] && found=1; done
+  [[ ${found} -eq 1 ]] || COMPONENTS+=("${comp}")
+done < "${COMPONENTS_FILE}"
+[[ ${#COMPONENTS[@]} -gt 0 ]] || die "no components defined in ${COMPONENTS_FILE}"
+log "Components: ${COMPONENTS[*]}"
+
+# --------------------------------------------------------------------------
+# Pool: copy every .deb into pool/<suite>/<component>/<p>/<package>/
+# --------------------------------------------------------------------------
+pool_path() { # <suite> <component> <package> <version> <arch>
+  local suite=$1 comp=$2 pkg=$3 ver=${4#*:} arch=$5 prefix
   if [[ ${pkg} == lib?* ]]; then prefix=${pkg:0:4}; else prefix=${pkg:0:1}; fi
-  echo "pool/${suite}/main/${prefix}/${pkg}/${pkg}_${ver}_${arch}.deb"
+  echo "pool/${suite}/${comp}/${prefix}/${pkg}/${pkg}_${ver}_${arch}.deb"
 }
 
 cd "${OUTPUT_DIR}"
@@ -141,6 +173,9 @@ while IFS= read -r -d '' deb; do
   ver=$(dpkg-deb -f "${deb}" Version)
   arch=$(dpkg-deb -f "${deb}" Architecture)
   [[ -n ${pkg} && -n ${ver} && -n ${arch} ]] || die "cannot read control metadata from ${deb}"
+  comp=${PKG_COMPONENT[${pkg}]:-}
+  [[ -n ${comp} ]] \
+    || die "package ${pkg} ($(basename "${deb}")) is not assigned to a component — add it to ${COMPONENTS_FILE#"${ROOT_DIR}"/}"
 
   targets=()
   for s in "${SUITES[@]}"; do
@@ -156,16 +191,16 @@ while IFS= read -r -d '' deb; do
     || die "cannot route $(basename "${deb}") (version ${ver}) to a suite: expected a '~<suite>' version suffix or a '_<family>_' asset name"
 
   for s in "${targets[@]}"; do
-    dest=$(pool_path "${s}" "${pkg}" "${ver}" "${arch}")
+    dest=$(pool_path "${s}" "${comp}" "${pkg}" "${ver}" "${arch}")
     if [[ -e ${dest} ]]; then
       cmp -s "${deb}" "${dest}" \
         || die "conflicting package in suite ${s}: ${dest} already exists with different content (from ${deb})"
-      printf '  %-9s %s (identical copy, skipped)\n' "${s}" "$(basename "${dest}")"
+      printf '  %-9s %-6s %s (identical copy, skipped)\n' "${s}" "${comp}" "$(basename "${dest}")"
       continue
     fi
     mkdir -p "$(dirname "${dest}")"
     cp "${deb}" "${dest}"
-    printf '  %-9s %s\n' "${s}" "$(basename "${dest}")"
+    printf '  %-9s %-6s %s\n' "${s}" "${comp}" "$(basename "${dest}")"
   done
   deb_count=$((deb_count + 1))
 done < <(find "${DEBS_DIR}" -type f -name '*.deb' -print0 | sort -z)
@@ -173,6 +208,9 @@ done < <(find "${DEBS_DIR}" -type f -name '*.deb' -print0 | sort -z)
 
 for s in "${SUITES[@]}"; do
   [[ -d pool/${s} ]] || die "suite ${s} received no packages — remove it from ${SUITES_FILE} or fix the routing"
+  for c in "${COMPONENTS[@]}"; do
+    [[ -d pool/${s}/${c} ]] || die "suite ${s} component ${c} received no packages — every component must be non-empty in every suite"
+  done
 done
 
 # --------------------------------------------------------------------------
@@ -187,16 +225,18 @@ touch .nojekyll
 # --------------------------------------------------------------------------
 for s in "${SUITES[@]}"; do
   log "Suite ${s}: generating indexes"
-  for arch in "${ARCHES[@]}"; do
-    dir="dists/${s}/main/binary-${arch}"
-    mkdir -p "${dir}"
-    # --arch <arch> scans *_<arch>.deb and *_all.deb only; --multiversion keeps
-    # every version of a package in the index instead of only the newest.
-    dpkg-scanpackages --multiversion --arch "${arch}" "pool/${s}" > "${dir}/Packages"
-    gzip -9n < "${dir}/Packages" > "${dir}/Packages.gz"
-    printf 'Archive: %s\nOrigin: %s\nLabel: %s\nComponent: main\nArchitecture: %s\n' \
-      "${s}" "${ORIGIN}" "${ORIGIN}" "${arch}" > "${dir}/Release"
-    echo "  binary-${arch}: $(grep -c '^Package:' "${dir}/Packages") packages"
+  for c in "${COMPONENTS[@]}"; do
+    for arch in "${ARCHES[@]}"; do
+      dir="dists/${s}/${c}/binary-${arch}"
+      mkdir -p "${dir}"
+      # --arch <arch> scans *_<arch>.deb and *_all.deb only; --multiversion keeps
+      # every version of a package in the index instead of only the newest.
+      dpkg-scanpackages --multiversion --arch "${arch}" "pool/${s}/${c}" > "${dir}/Packages"
+      gzip -9n < "${dir}/Packages" > "${dir}/Packages.gz"
+      printf 'Archive: %s\nOrigin: %s\nLabel: %s\nComponent: %s\nArchitecture: %s\n' \
+        "${s}" "${ORIGIN}" "${ORIGIN}" "${c}" "${arch}" > "${dir}/Release"
+      echo "  ${c}/binary-${arch}: $(grep -c '^Package:' "${dir}/Packages") packages"
+    done
   done
 
   log "Suite ${s}: writing Release"
@@ -208,7 +248,7 @@ APT::FTPArchive::Release {
   Suite "${s}";
   Codename "${s}";
   Architectures "${ARCHES[*]}";
-  Components "main";
+  Components "${COMPONENTS[*]}";
   Description "Podman .deb packages for ${SUITE_DESC[${s}]} - ${REPO_URL}";
   Acquire-By-Hash "yes";
 };
@@ -285,7 +325,7 @@ sudo tee /etc/apt/sources.list.d/${KEYRING_NAME}.sources &lt;&lt;'EOF'
 Types: deb
 URIs: ${REPO_URL}
 Suites: ${SUITES[0]}
-Components: main
+Components: ${COMPONENTS[*]}
 Signed-By: /etc/apt/keyrings/${KEYRING_NAME}.gpg
 EOF
 
@@ -295,6 +335,16 @@ sudo apt install podman passt crun conmon          # podman pulls in the require
 # or everything the repository publishes:
 sudo apt install podman podman-remote podman-docker netavark aardvark-dns \\
   golang-github-containers-common containers-storage crun conmon passt</pre>
+<h2>Components</h2>
+<ul>
+<li><code>main</code> — podman, podman-remote, podman-docker and the companions podman's
+versioned <code>Depends</code> require (netavark, aardvark-dns, golang-github-containers-common,
+containers-storage). <code>Components: main</code> alone gives a complete, working Podman; the
+runtime and monitor then come from the distro's own crun/runc and conmon.</li>
+<li><code>extra</code> — optional newer builds of passt, crun and conmon. The distro versions
+already satisfy podman's dependencies; add this component to install the current upstream
+releases instead.</li>
+</ul>
 <p>Signing key: <a href="${KEYRING_NAME}.gpg">${KEYRING_NAME}.gpg</a> (binary keyring) ·
 <a href="${KEYRING_NAME}.asc">${KEYRING_NAME}.asc</a> (armored) · fingerprint <code>${FPR}</code></p>
 <p>Each suite carries the most recent few releases of every package; apt installs the
@@ -305,16 +355,18 @@ HTML
   for s in "${SUITES[@]}"; do
     echo "<h3><code>${s}</code> — ${SUITE_DESC[${s}]}</h3>"
     echo "<p><a href=\"dists/${s}/InRelease\">InRelease</a></p>"
-    echo "<table><tr><th>Package</th><th>Version</th><th>Architecture</th></tr>"
-    for arch in "${ARCHES[@]}"; do
-      awk '
-        /^Package:/      { p=$2 }
-        /^Version:/      { v=$2 }
-        /^Architecture:/ { a=$2 }
-        /^[[:space:]]*$/ { if (p!="") print p "\t" v "\t" a; p=v=a="" }
-        END              { if (p!="") print p "\t" v "\t" a }' "dists/${s}/main/binary-${arch}/Packages"
-    done | sort -u | sort -t "$(printf '\t')" -k1,1 -k2,2Vr -k3,3 \
-         | awk -F'\t' '{printf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n", $1, $2, $3}'
+    echo "<table><tr><th>Component</th><th>Package</th><th>Version</th><th>Architecture</th></tr>"
+    for c in "${COMPONENTS[@]}"; do   # table order, then package / newest version first
+      for arch in "${ARCHES[@]}"; do
+        awk '
+          /^Package:/      { p=$2 }
+          /^Version:/      { v=$2 }
+          /^Architecture:/ { a=$2 }
+          /^[[:space:]]*$/ { if (p!="") print p "\t" v "\t" a; p=v=a="" }
+          END              { if (p!="") print p "\t" v "\t" a }' "dists/${s}/${c}/binary-${arch}/Packages"
+      done | sort -u | sort -t "$(printf '\t')" -k1,1 -k2,2Vr -k3,3 \
+           | awk -F'\t' -v c="${c}" '{printf "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n", c, $1, $2, $3}'
+    done
     echo "</table>"
   done
   echo "<p>Generated $(date -u +'%Y-%m-%d %H:%M UTC').</p>"

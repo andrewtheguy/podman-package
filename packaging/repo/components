@@ -1,0 +1,27 @@
+# APT components published to GitHub Pages by scripts/build-apt-repo.sh.
+#
+# One line per binary package, whitespace separated:
+#   <package>  <component>
+#
+# Every .deb that is published must have its Package name listed here; an
+# unlisted package aborts the build so a new product cannot slip in
+# unclassified. Which GitHub release a .deb comes from is irrelevant — the
+# split is purely by package name.
+#
+# main   Everything needed for a working Podman install. `apt install podman`
+#        must resolve with this component alone: podman's versioned Depends on
+#        netavark, aardvark-dns, containers-common and containers-storage are
+#        not satisfiable from the distro archives, so they live here too.
+# extra  Optional newer builds of packages whose distro versions already satisfy
+#        podman's dependencies (Depends: conmon, crun | runc; Recommends: passt).
+#        Add the component to pick up the current upstream releases.
+podman                            main
+podman-remote                     main
+podman-docker                     main
+netavark                          main
+aardvark-dns                      main
+golang-github-containers-common   main
+containers-storage                main
+crun                              extra
+conmon                            extra
+passt                             extra

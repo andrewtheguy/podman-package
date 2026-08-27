@@ -1,10 +1,12 @@
 name: Publish APT Repository
 
 # Assembles a signed APT repository from the .deb assets of the most recent
-# Podman releases and Companion releases (keep_releases of each, default 3, so
+# main-* and extra-* component releases (keep_releases of each, default 3, so
 # clients holding a slightly stale index still find their .debs and older
-# versions stay pinnable), smoke-installs from it, and deploys it to GitHub
-# Pages. Runs automatically after either build workflow succeeds and can be
+# versions stay pinnable), indexed into the `main` (podman and its required
+# companions) and `extra` (optional passt/crun/conmon) components per
+# packaging/repo/components, smoke-installs from it, and deploys it to GitHub
+# Pages. Runs automatically after a successful build workflow run and can be
 # dispatched manually (optionally pinning specific release tags).
 #
 # Requirements (see README "Hosting Your Own APT Repository"):
@@ -16,17 +18,17 @@ on:
   workflow_dispatch:
     inputs:
       keep_releases:
-        description: 'How many of the most recent Podman releases and Companion releases to publish (each). Older versions stay installable/pinnable until they rotate out.'
+        description: 'How many of the most recent main and extra component releases to publish (each). Older versions stay installable/pinnable until they rotate out.'
         required: false
         type: number
         default: 3
-      podman_release:
-        description: 'Publish exactly this Podman release tag (e.g. v6.1.0-20260813-1) instead of the keep_releases most recent v* releases.'
+      main_release:
+        description: 'Publish exactly this main component release tag (e.g. main-20260827-1) instead of the keep_releases most recent main-* releases.'
         required: false
         type: string
         default: ''
-      extras_release:
-        description: 'Publish exactly this Companion release tag (e.g. podman-extras-20260720-1) instead of the keep_releases most recent podman-extras-* releases.'
+      extra_release:
+        description: 'Publish exactly this extra component release tag (e.g. extra-20260827-1) instead of the keep_releases most recent extra-* releases.'
         required: false
         type: string
         default: ''
@@ -37,8 +39,7 @@ on:
         default: false
   workflow_run:
     workflows:
-      - Build and Release Podman .deb Packages
-      - Build and Release Podman Companion .deb Packages
+      - Build and Release .deb Packages
     types: [completed]
 
 permissions:
@@ -67,8 +68,8 @@ jobs:
       - name: Resolve release tags
         id: releases
         env:
-          PODMAN_INPUT: ${{ inputs.podman_release }}
-          EXTRAS_INPUT: ${{ inputs.extras_release }}
+          MAIN_INPUT: ${{ inputs.main_release }}
+          EXTRA_INPUT: ${{ inputs.extra_release }}
           KEEP_INPUT: ${{ inputs.keep_releases }}
         run: |
           set -euo pipefail
@@ -87,26 +88,26 @@ jobs:
                 --jq "map(select(.tagName | test(\"${pattern}\"))) | sort_by(.publishedAt) | reverse | .[:${KEEP}] | .[].tagName"
             fi
           }
-          PODMAN_TAGS=$(pick '^v[0-9]' "${PODMAN_INPUT}" | xargs)
-          EXTRAS_TAGS=$(pick '^podman-extras-' "${EXTRAS_INPUT}" | xargs)
-          [[ -n "${PODMAN_TAGS}" ]] || { echo "::error::no published Podman release (v*) found"; exit 1; }
-          [[ -n "${EXTRAS_TAGS}" ]] || { echo "::error::no published Companion release (podman-extras-*) found"; exit 1; }
-          echo "podman_tags=${PODMAN_TAGS}" >> "$GITHUB_OUTPUT"
-          echo "extras_tags=${EXTRAS_TAGS}" >> "$GITHUB_OUTPUT"
-          echo "Podman releases    (newest first): ${PODMAN_TAGS}"
-          echo "Companion releases (newest first): ${EXTRAS_TAGS}"
+          MAIN_TAGS=$(pick '^main-[0-9]' "${MAIN_INPUT}" | xargs)
+          EXTRA_TAGS=$(pick '^extra-[0-9]' "${EXTRA_INPUT}" | xargs)
+          [[ -n "${MAIN_TAGS}" ]] || { echo "::error::no published main component release (main-*) found — run the build workflow with component=main"; exit 1; }
+          [[ -n "${EXTRA_TAGS}" ]] || { echo "::error::no published extra component release (extra-*) found — run the build workflow with component=extra"; exit 1; }
+          echo "main_tags=${MAIN_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "extra_tags=${EXTRA_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "main releases  (newest first): ${MAIN_TAGS}"
+          echo "extra releases (newest first): ${EXTRA_TAGS}"
 
       - name: Download release .deb assets
         env:
-          PODMAN_TAGS: ${{ steps.releases.outputs.podman_tags }}
-          EXTRAS_TAGS: ${{ steps.releases.outputs.extras_tags }}
+          MAIN_TAGS: ${{ steps.releases.outputs.main_tags }}
+          EXTRA_TAGS: ${{ steps.releases.outputs.extra_tags }}
         run: |
           set -euo pipefail
-          for tag in ${PODMAN_TAGS}; do
-            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/podman/${tag}"
+          for tag in ${MAIN_TAGS}; do
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/main/${tag}"
           done
-          for tag in ${EXTRAS_TAGS}; do
-            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/extras/${tag}"
+          for tag in ${EXTRA_TAGS}; do
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir "debs/extra/${tag}"
           done
           echo "--- downloaded ---"
           find debs -type f -name '*.deb' | sort
@@ -145,7 +146,9 @@ jobs:
           find repo-output -type f -not -path '*/by-hash/*' | sort
 
       # Installs podman + companions from the assembled repo inside real
-      # distro containers; a repository that apt cannot consume never deploys.
+      # distro containers — once with `main extra`, once with `main` only so
+      # the component split is proven; a repository that apt cannot consume
+      # never deploys.
       - name: Smoke test — apt-get install from the assembled repository
         if: ${{ !inputs.skip_smoke_test }}
         run: ./scripts/smoke-apt-repo.sh repo-output

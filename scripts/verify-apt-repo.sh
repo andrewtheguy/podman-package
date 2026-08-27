@@ -9,7 +9,9 @@
 #      repository root (<KEYRING_NAME>.gpg), and InRelease's payload equals Release.
 #   2. Every file listed in Release's SHA256 section exists with that exact size
 #      and hash, and (Acquire-By-Hash) has a by-hash/SHA256/<hash> copy.
-#   3. Every Packages stanza points at a pool file with the listed Size and
+#   3. Every component x architecture named in Release has a Packages index,
+#      and no index exists for a component Release does not name.
+#   4. Every Packages stanza points at a pool file with the listed Size and
 #      SHA256, and Packages.gz decompresses to exactly Packages.
 # Any mismatch exits 1 so an inconsistent repository never reaches GitHub Pages.
 #
@@ -85,11 +87,26 @@ for suite_dir in "${REPO_ROOT}"/dists/*/; do
     fi
   done < <(awk '$0=="SHA256:"{f=1;next} /^[A-Za-z0-9-]+:/{f=0} f{print $1, $2, $3}' "${release}")
 
-  # 3. Packages <-> pool
-  for pkgs in "${suite_dir}"main/binary-*/Packages; do
+  # 3. every Components x Architectures pair in Release has a Packages index
+  comps=$(awk '/^Components:/{$1="";print}' "${release}")
+  archs=$(awk '/^Architectures:/{$1="";print}' "${release}")
+  for c in ${comps}; do
+    for a in ${archs}; do
+      checks=$((checks + 1))
+      [[ -f ${suite_dir}${c}/binary-${a}/Packages ]] || fail "${suite}: Release lists component ${c} but ${c}/binary-${a}/Packages is missing"
+    done
+  done
+  for pkgs in "${suite_dir}"*/binary-*/Packages; do
+    c=${pkgs#"${suite_dir}"}; c=${c%%/*}
+    checks=$((checks + 1))
+    [[ " ${comps} " == *" ${c} "* ]] || fail "${suite}: index ${pkgs#"${suite_dir}"} belongs to component ${c} which Release does not list"
+  done
+
+  # 4. Packages <-> pool
+  for pkgs in "${suite_dir}"*/binary-*/Packages; do
     if [[ -f ${pkgs}.gz ]]; then
       checks=$((checks + 1))
-      gzip -dc "${pkgs}.gz" | cmp -s - "${pkgs}" || fail "${suite}: $(basename "$(dirname "${pkgs}")")/Packages.gz != Packages"
+      gzip -dc "${pkgs}.gz" | cmp -s - "${pkgs}" || fail "${suite}: ${pkgs#"${suite_dir}"}.gz != Packages"
     fi
     while read -r filename size sha; do
       [[ -n ${filename} ]] || continue

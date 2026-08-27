@@ -3,8 +3,13 @@
 This repository builds current Podman releases and their supporting components
 as installable `.deb` packages for Ubuntu and Debian on `amd64` and `arm64`.
 Source-built packages use Docker, pinned upstream sources, and distro packaging
-to keep builds isolated and reproducible. The companion workflow also includes
+to keep builds isolated and reproducible. The `extra` component also includes
 exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
+
+The project is APT-first: the deliverable is the signed APT repository with a
+`main` component (Podman and everything it requires) and an `extra` component
+(optional newer passt, crun, conmon). GitHub releases exist only as the
+repository's storage layer, one release per component build.
 
 ## Install via APT (maintainer's personal repository)
 
@@ -19,8 +24,8 @@ exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
 
 The repository is served from GitHub Pages at
 <https://andrewtheguy.github.io/podman-package/> and is rebuilt from the three
-most recent Podman releases and the three most recent Companion releases by the
-**Publish APT Repository** workflow. apt installs the newest version; the older
+most recent `main` component releases and the three most recent `extra`
+component releases by the **Publish APT Repository** workflow. apt installs the newest version; the older
 ones stay downloadable — so a slightly stale `apt update` still resolves — and
 pinnable (`sudo apt install podman=6.0.1+20260709-1~noble`) until they rotate out.
 
@@ -35,7 +40,7 @@ sudo tee /etc/apt/sources.list.d/podman-package.sources <<'EOF'
 Types: deb
 URIs: https://andrewtheguy.github.io/podman-package
 Suites: noble
-Components: main
+Components: main extra
 Signed-By: /etc/apt/keyrings/podman-package.gpg
 EOF
 
@@ -48,6 +53,19 @@ sudo apt install podman passt crun conmon
 containers-common, containers-storage) through its versioned `Depends`; `passt`,
 `crun`, and `conmon` are listed explicitly because they are recommended rather
 than required.
+
+The repository has two components, split by what Podman actually needs
+(`packaging/repo/components`); each is built and released by its own run of the
+build workflow:
+
+| Component | Packages | Purpose |
+|-----------|----------|---------|
+| `main` | podman, podman-remote, podman-docker, netavark, aardvark-dns, golang-github-containers-common, containers-storage | Everything a working Podman 6 needs. `Components: main` alone gives a complete install — podman's versioned `Depends` are satisfied from here, and its runtime/monitor come from the distro's own crun (or runc) and conmon. |
+| `extra` | passt, crun, conmon | Optional newer builds. The distro versions already satisfy podman's dependencies; add the component to install the current upstream releases instead (the pinned passt includes newer `pasta` fixes). |
+
+Use `Components: main` if you only want Podman and its required companions, or
+`Components: main extra` (as above) to also pick up the newer passt, crun, and
+conmon.
 
 To install every package the repository publishes (the ten below are the full
 set for each suite):
@@ -71,28 +89,31 @@ every package is versioned above its distro counterpart.
 | `resolute` | Ubuntu 26.04 | source-built `~resolute` packages + the pinned Ubuntu `passt` binary |
 | `trixie` | Debian 13 | source-built `~trixie` packages + the pinned Debian `passt` binary |
 
-Every suite carries `amd64` and `arm64`. The suite table lives in
-`packaging/repo/suites`; the signing key fingerprint is printed on the
-repository's index page and in `packaging/repo/pubkey.asc`.
+Every suite carries both components and `amd64` and `arm64`. The suite table
+lives in `packaging/repo/suites` and the package-to-component table in
+`packaging/repo/components` (a `.deb` whose package is not listed there fails
+the publish); the signing key fingerprint is printed on the repository's index
+page and in `packaging/repo/pubkey.asc`.
 
 ## Downloads
 
-Builds are published in two release groups:
+The GitHub releases mirror the APT components, one release per component build:
 
-- [Podman `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=%22Upstream+tag%22) — the main `podman`, `podman-remote`, and `podman-docker` packages.
-- [Podman Companion `.deb` releases](https://github.com/andrewtheguy/podman-package/releases?q=companion) — networking, DNS, runtime, monitoring, configuration, and storage packages: passt, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage.
+- [`main` component releases](https://github.com/andrewtheguy/podman-package/releases?q=%22main+component%22) (`main-<YYYYMMDD>-<N>`) — podman, podman-remote, podman-docker, netavark, aardvark-dns, containers-common, and containers-storage: a complete Podman.
+- [`extra` component releases](https://github.com/andrewtheguy/podman-package/releases?q=%22extra+component%22) (`extra-<YYYYMMDD>-<N>`) — passt, crun, and conmon: optional newer builds.
 - [All releases](https://github.com/andrewtheguy/podman-package/releases) — the combined chronological GitHub release history.
 
-For a complete Podman 6 installation, download the packages for your distro and
-architecture from both the Podman and Podman Companion release groups.
+For a complete Podman 6 installation without APT, download the `.deb`s for your
+distro and architecture from the latest `main` release; add the `extra` release
+if you want the newer passt/crun/conmon.
 
 netavark (Rust network stack), aardvark-dns (Rust DNS server),
 containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
 **required companions of Podman 6.0** — Podman 6 will not provide container
 networking or name resolution without netavark/aardvark-dns and needs config
-matching its release. They are shipped here as extra packages **built and
-released for all targets** (the distro repositories do not provide versions new
-enough for Podman 6). Install them together on each target.
+matching its release. They are therefore part of the `main` component, **built
+and released for all targets** (the distro repositories do not provide versions
+new enough for Podman 6). Install them together on each target.
 
 crun (C OCI runtime) and conmon (container monitor) are **recommended, not
 required**: Podman uses crun as its default runtime and conmon to monitor
@@ -101,7 +122,7 @@ distro-provided crun (or runc) and conmon will still run containers. Both are
 built and released here for all targets so you can pull in the current releases
 when you want them.
 
-passt provides the `pasta` user-mode networking backend. The companion release
+passt provides the `pasta` user-mode networking backend. The `extra` release
 includes exact `0.0~git20260611.a9c61ff-1` Ubuntu Launchpad and Debian snapshot
 binaries for `amd64` and `arm64`; every URL and SHA-256 is pinned in
 `packaging/versions.env`. The release asset name identifies the binary's
@@ -149,30 +170,37 @@ installed alongside it.
 
 ## GitHub Actions (Default)
 
-Two build workflows are triggered manually from the Actions tab (`workflow_dispatch`):
+One build workflow, **Build and Release .deb Packages**
+(`.github/workflows/build-and-release.yml`), is triggered manually from the
+Actions tab (`workflow_dispatch`) with a `component` input:
 
-- **Build and Release Podman .deb Packages** — builds Podman for every supported platform/architecture in parallel.
-- **Build and Release Podman Companion .deb Packages** — fetches pinned passt binaries and builds netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage (the packages the Podman workflow does not cover).
+- `main` — builds podman (with podman-remote and podman-docker), netavark, aardvark-dns, containers-storage, and containers-common for every supported platform/architecture in parallel. Run it when Podman or a required companion is bumped.
+- `extra` — fetches the pinned passt binaries and builds crun and conmon. Run it when one of those is bumped.
 
-A third workflow, **Publish APT Repository** (`.github/workflows/publish-apt-repo.yml`),
-runs automatically after either build workflow succeeds (and can be dispatched
-manually). It downloads the `.deb` assets of the `keep_releases` most recent
-Podman releases and Companion releases (default 3 of each; a dispatch can instead
-pin exactly one `podman_release` / `extras_release` tag), assembles and signs an
-APT repository with every downloaded version indexed, smoke-installs `podman`
-from it inside `noble`, `resolute`, and `trixie` containers, and deploys the
-result to GitHub Pages. Each publish replaces the whole site, so a version is
+Before uploading, the workflow checks every built `.deb` against
+`packaging/repo/components` and fails if a package does not belong to the
+component being released.
+
+A second workflow, **Publish APT Repository** (`.github/workflows/publish-apt-repo.yml`),
+runs automatically after a successful build (and can be dispatched manually).
+It downloads the `.deb` assets of the `keep_releases` most recent `main` and
+`extra` releases (default 3 of each; a dispatch can instead pin exactly one
+`main_release` / `extra_release` tag), assembles and signs an
+APT repository with every downloaded version indexed into the `main` and `extra`
+components, smoke-installs from it inside `noble`, `resolute`, and `trixie`
+containers (once with `main extra`, once with `main` alone to prove the split
+holds), and deploys the result to GitHub Pages. Each publish replaces the whole site, so a version is
 gone once it falls outside the retention window — the GitHub Release itself
 keeps every `.deb` forever. See
 [Hosting Your Own APT Repository](#hosting-your-own-apt-repository) for the
 one-time setup it needs.
 
-Each workflow builds or fetches its platform/architecture inputs, then publishes
-a **single unified pre-release** containing every `.deb` from that run plus a
-combined `SHA256SUMS`:
+Each run builds or fetches its component's inputs, then publishes a **single
+unified pre-release** containing every `.deb` from that run plus a combined
+`SHA256SUMS`, tagged `<component>-<YYYYMMDD>-<N>`:
 
-- Podman: `v<VERSION>-<YYYYMMDD>-<N>`
-- Companions: `podman-extras-<YYYYMMDD>-<N>`
+- `main-<YYYYMMDD>-<N>`
+- `extra-<YYYYMMDD>-<N>`
 
 `<N>` starts at `1` for the first build of that UTC date and increments for same-day reruns (`2`, `3`, ...).
 
@@ -181,8 +209,9 @@ combined `SHA256SUMS`:
 The published repository is tied to my GitHub Pages site and my signing key, so
 to use these packages you run the same pipeline in your own fork. One-time setup:
 
-1. **Fork** this repository and run both build workflows at least once so a
-   Podman release (`v*`) and a Companion release (`podman-extras-*`) exist.
+1. **Fork** this repository and run the build workflow once with
+   `component=main` and once with `component=extra` so a `main-*` and an
+   `extra-*` release exist.
 2. **Generate your own signing key** (never reuse mine):
 
    ```bash
@@ -228,25 +257,27 @@ to use these packages you run the same pipeline in your own fork. One-time setup
    runs automatically after each successful build workflow.
 
 Your repository is served at `https://<owner>.github.io/<repo>/` with the same
-`noble` / `resolute` / `trixie` suites; the generated index page shows the exact
-`sources` snippet and key fingerprint for your fork. To re-run the assembly
+`noble` / `resolute` / `trixie` suites and `main` / `extra` components; the
+generated index page shows the exact `sources` snippet and key fingerprint for
+your fork. If you add a product, add its binary package name to
+`packaging/repo/components` or the publish fails. To re-run the assembly
 locally (on a Debian/Ubuntu host or container with `dpkg-dev`, `apt-utils`, and
 `gnupg`), download as many releases as you want retained — every `.deb` under
 the input directory is indexed:
 
 ```bash
 gpg --import keys/apt-signing-key.private.asc
-for tag in <podman-tag-1> <podman-tag-2> <podman-tag-3>; do
-  gh release download "$tag" --pattern '*.deb' --dir "debs/podman/$tag"
+for tag in <main-tag-1> <main-tag-2> <main-tag-3>; do
+  gh release download "$tag" --pattern '*.deb' --dir "debs/main/$tag"
 done
-for tag in <extras-tag-1> <extras-tag-2> <extras-tag-3>; do
-  gh release download "$tag" --pattern '*.deb' --dir "debs/extras/$tag"
+for tag in <extra-tag-1> <extra-tag-2> <extra-tag-3>; do
+  gh release download "$tag" --pattern '*.deb' --dir "debs/extra/$tag"
 done
 ./scripts/build-apt-repo.sh debs repo-output https://<owner>.github.io/<repo>
 ./scripts/smoke-apt-repo.sh repo-output      # optional: apt-get install in containers
 ```
 
-Retention is a size trade-off: one Podman release plus one Companion release is
+Retention is a size trade-off: one `main` release plus one `extra` release is
 roughly 215 MB across all suites and architectures, so the default of three each
 keeps the site around 650 MB, under GitHub Pages' ~1 GB guideline. Raise
 `keep_releases` with care.
@@ -355,7 +386,7 @@ Examples:
 ```
 
 passt is intentionally not rebuilt. To fetch and verify one of the exact
-binaries used by the companion workflow:
+binaries the `extra` component ships:
 
 ```bash
 ./scripts/fetch-passt-deb.sh ubuntu amd64 output/passt
@@ -364,10 +395,10 @@ binaries used by the companion workflow:
 
 ## Script Layout
 
-- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (Podman), `.github/workflows/build-and-release-extras.yml` (companion packages), and `.github/workflows/publish-apt-repo.yml` (APT repository → GitHub Pages)
+- GitHub Actions workflows: `.github/workflows/build-and-release.yml` (one APT component per run: `main` or `extra`) and `.github/workflows/publish-apt-repo.yml` (APT repository → GitHub Pages)
 - Host/orchestrator entrypoint: `scripts/build-deb.sh`
 - Pinned passt binary fetcher: `scripts/fetch-passt-deb.sh`
-- APT repository: `scripts/apt-repo-keygen.sh` (signing key), `scripts/build-apt-repo.sh` (assemble + sign), `scripts/verify-apt-repo.sh` (integrity gate), `scripts/smoke-apt-repo.sh` (container install test); config in `packaging/repo/suites` and `packaging/repo/pubkey.asc`; private key in gitignored `keys/`
+- APT repository: `scripts/apt-repo-keygen.sh` (signing key), `scripts/build-apt-repo.sh` (assemble + sign), `scripts/verify-apt-repo.sh` (integrity gate), `scripts/smoke-apt-repo.sh` (container install test); config in `packaging/repo/suites`, `packaging/repo/components`, and `packaging/repo/pubkey.asc`; private key in gitignored `keys/`
 - Shared host helpers: `scripts/lib/`
 - Shared in-container dispatcher: `scripts/container/build.sh`
 - Product build modules: `scripts/container/products/`
@@ -575,21 +606,19 @@ Both methods require network access to:
 
 ## Releases
 
-There are two build workflows, each triggered manually (`workflow_dispatch`):
+One build workflow, **Build and Release .deb Packages**
+(`.github/workflows/build-and-release.yml`), is triggered manually
+(`workflow_dispatch`) with a `component` input of `main` or `extra`; releases
+mirror the APT components exactly:
 
-- **Build and Release Podman .deb Packages** — `.github/workflows/build-and-release.yml`
-- **Build and Release Podman Companion .deb Packages** — `.github/workflows/build-and-release-extras.yml` (passt, netavark, aardvark-dns, crun, conmon, containers-common, containers-storage)
+- `main-<YYYYMMDD>-<N>` (e.g., `main-20260827-1`) — podman, podman-remote, podman-docker, netavark, aardvark-dns, containers-common, and containers-storage.
+- `extra-<YYYYMMDD>-<N>` (e.g., `extra-20260827-1`) — passt, crun, and conmon.
 
-After either succeeds, **Publish APT Repository** republishes the GitHub Pages
-APT repository from the latest release of each group (see
+After a run succeeds, **Publish APT Repository** republishes the GitHub Pages
+APT repository from the most recent releases of each component (see
 [Install via APT](#install-via-apt-maintainers-personal-repository)).
 
-Each workflow run publishes a single unified pre-release containing every `.deb` it built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark, aardvark-dns, crun, conmon, and containers-storage carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
-
-Release tag formats:
-
-- Podman: `v<PODMAN_VERSION>-<YYYYMMDD>-<N>` (e.g., `v6.0.0-20260415-1`).
-- Companions: `podman-extras-<YYYYMMDD>-<N>` (e.g., `podman-extras-20260415-1`) — one release holding the passt, netavark, aardvark-dns, crun, conmon, containers-common, and containers-storage `.deb`s.
+Each run publishes a single unified pre-release containing every `.deb` it built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark, aardvark-dns, crun, conmon, and containers-storage carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
 
 Package version format inside source-built `.deb`s:
 `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example
@@ -607,13 +636,13 @@ Ubuntu 24.04 (`noble`):
 - Requirement for `pasta --map-host-loopback`: `passt >= 0.0~git20250217.a1e48a0-1`.
 - Ubuntu noble currently provides `passt 0.0~git20240220.1e6f92b-1`, which is below that requirement.
 - For noble hosts that need this feature, install the `ubuntu` passt asset from
-  the companion release. It is the exact pinned
+  the `extra` release (or `apt install passt` with the `extra` component). It is the exact pinned
   [`0.0~git20260611.a9c61ff-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20260611.a9c61ff-1).
 
 Debian 13 (`trixie`):
 - No workaround is required.
 - Debian trixie provides `passt 0.0~git20250503.587980c-2`, which satisfies the requirement above.
-- The companion release also provides the newer exact pinned
+- The `extra` release also provides the newer exact pinned
   [`0.0~git20260611.a9c61ff-1` Debian forky binary](https://packages.debian.org/forky/passt)
   from snapshot.debian.org.
 - Quick check:
@@ -682,7 +711,7 @@ Requirements:
 - Podman >= 6.1.0 (this repository's builds satisfy this; see
   `packaging/versions.env`).
 - A passt package that ships the `pesto` binary:
-  `passt >= 0^20260507.g1afd4ed`. The pinned companion binary
+  `passt >= 0^20260507.g1afd4ed`. The pinned `extra` component binary
   `0.0~git20260611.a9c61ff-1` satisfies this; distro-provided passt on
   Ubuntu noble and Debian trixie does not.
 - The container must be on a rootless **bridge** network (a named network or a

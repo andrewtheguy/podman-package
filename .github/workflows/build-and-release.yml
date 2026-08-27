@@ -1,7 +1,23 @@
-name: Build and Release Podman .deb Packages
+name: Build and Release .deb Packages
+
+# Builds one APT component (see packaging/repo/components) and publishes it as a
+# GitHub release, tagged <component>-<YYYYMMDD>-<N>:
+#   main   podman (+ podman-remote, podman-docker), netavark, aardvark-dns,
+#          containers-common, containers-storage — everything a working Podman
+#          needs. Rebuild when Podman or a required companion is bumped.
+#   extra  passt (pinned distro binaries), crun, conmon — optional newer builds.
+# The release is only a storage/transport layer for the APT repository: the
+# Publish APT Repository workflow runs after a successful build and republishes
+# the most recent main and extra releases.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'APT component to build and release'
+        required: true
+        type: choice
+        options: [main, extra]
 
 permissions:
   contents: write
@@ -10,126 +26,109 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      component: ${{ inputs.component }}
       build_version: ${{ steps.vars.outputs.build_version }}
-      podman_tag: ${{ steps.vars.outputs.podman_tag }}
       podman_version: ${{ steps.vars.outputs.podman_version }}
-      upstream_sha256: ${{ steps.vars.outputs.upstream_sha256 }}
+      products: ${{ steps.vars.outputs.products }}
       release_revision: ${{ steps.tags.outputs.release_revision }}
       release_tag: ${{ steps.tags.outputs.release_tag }}
     env:
       GH_TOKEN: ${{ github.token }}
+      COMPONENT: ${{ inputs.component }}
     steps:
       - uses: actions/checkout@v4
       - name: Compute shared build variables
         id: vars
         run: |
+          set -euo pipefail
           source packaging/versions.env
-          echo "build_version=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
-          echo "podman_tag=${PODMAN_TAG}" >> "$GITHUB_OUTPUT"
-          echo "podman_version=${PODMAN_TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "upstream_sha256=${UPSTREAM_SHA256}" >> "$GITHUB_OUTPUT"
+          # Compiled products (docker/Dockerfile PRODUCT values) per component.
+          # containers-common (Architecture: all) and the pinned passt binaries
+          # have their own jobs below, gated on the component.
+          case "${COMPONENT}" in
+            main)  products='["podman","netavark","aardvark-dns","containers-storage"]' ;;
+            extra) products='["crun","conmon"]' ;;
+            *) echo "::error::unknown component '${COMPONENT}'"; exit 1 ;;
+          esac
+          {
+            echo "build_version=$(date -u +%Y%m%d)"
+            echo "podman_version=${PODMAN_TAG#v}"
+            echo "products=${products}"
+          } >> "$GITHUB_OUTPUT"
       - name: Resolve release tag
         id: tags
         run: |
-          PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
+          set -euo pipefail
           BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
-
           REVISION=1
-          while gh release view "${PODMAN_TAG}-${BUILD_VERSION}-${REVISION}" --repo "${{ github.repository }}" >/dev/null 2>&1; do
+          while gh release view "${COMPONENT}-${BUILD_VERSION}-${REVISION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; do
             REVISION=$((REVISION + 1))
           done
-
-          RELEASE_TAG="${PODMAN_TAG}-${BUILD_VERSION}-${REVISION}"
+          RELEASE_TAG="${COMPONENT}-${BUILD_VERSION}-${REVISION}"
           echo "release_revision=${REVISION}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved release tag: ${RELEASE_TAG} (revision ${REVISION})"
       - name: Create draft release
         run: |
-          PODMAN_VERSION="${{ steps.vars.outputs.podman_version }}"
-          PODMAN_TAG="${{ steps.vars.outputs.podman_tag }}"
-          BUILD_VERSION="${{ steps.vars.outputs.build_version }}"
-          RELEASE_TAG="${{ steps.tags.outputs.release_tag }}"
-          RELEASE_REVISION="${{ steps.tags.outputs.release_revision }}"
-
-          gh release create "${RELEASE_TAG}" \
-            --repo "${{ github.repository }}" \
+          set -euo pipefail
+          gh release create "${{ steps.tags.outputs.release_tag }}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --draft \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} .deb packages - ${BUILD_VERSION}-${RELEASE_REVISION}" \
-            --notes "$(cat <<EOF
-          ## Podman ${PODMAN_VERSION} .deb packages
+            --title "Podman ${{ steps.vars.outputs.podman_version }} ${COMPONENT} component .deb packages - ${{ steps.vars.outputs.build_version }}-${{ steps.tags.outputs.release_revision }}" \
+            --notes "Build in progress."
 
-          Targets (amd64 and arm64):
-          - Ubuntu 24.04 (noble)
-          - Ubuntu 26.04 (resolute)
-          - Debian 13 (trixie)
-
-          Build date: ${BUILD_VERSION}
-          Build revision: ${RELEASE_REVISION}
-          Upstream tag: ${PODMAN_TAG}
-
-          SHA256 checksums are attached as \`SHA256SUMS\`.
-          EOF
-          )"
-
-  build:
+  build-compiled:
     needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - distro_family: ubuntu
-            distro: noble
-            base_image: ubuntu:noble
-            arch: amd64
-            runner: ubuntu-latest
-          - distro_family: ubuntu
-            distro: noble
-            base_image: ubuntu:noble
-            arch: arm64
-            runner: ubuntu-24.04-arm
-          - distro_family: debian
-            distro: trixie
-            base_image: debian:trixie
-            arch: amd64
-            runner: ubuntu-latest
-          - distro_family: debian
-            distro: trixie
-            base_image: debian:trixie
-            arch: arm64
-            runner: ubuntu-24.04-arm
-          - distro_family: ubuntu
-            distro: resolute
-            base_image: ubuntu:resolute
-            arch: amd64
-            runner: ubuntu-latest
-          - distro_family: ubuntu
-            distro: resolute
-            base_image: ubuntu:resolute
-            arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
+        product: ${{ fromJSON(needs.prepare.outputs.products) }}
+        target:
+          - { distro_family: ubuntu, distro: noble,    base_image: 'ubuntu:noble',    arch: amd64, runner: ubuntu-latest }
+          - { distro_family: ubuntu, distro: noble,    base_image: 'ubuntu:noble',    arch: arm64, runner: ubuntu-24.04-arm }
+          - { distro_family: ubuntu, distro: resolute, base_image: 'ubuntu:resolute', arch: amd64, runner: ubuntu-latest }
+          - { distro_family: ubuntu, distro: resolute, base_image: 'ubuntu:resolute', arch: arm64, runner: ubuntu-24.04-arm }
+          - { distro_family: debian, distro: trixie,   base_image: 'debian:trixie',   arch: amd64, runner: ubuntu-latest }
+          - { distro_family: debian, distro: trixie,   base_image: 'debian:trixie',   arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.target.runner }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build .deb packages
+      - name: Build .deb package
         env:
           BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
           BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
-          PODMAN_TAG: ${{ needs.prepare.outputs.podman_tag }}
-          UPSTREAM_SHA256: ${{ needs.prepare.outputs.upstream_sha256 }}
         run: |
+          set -euo pipefail
+          source packaging/versions.env
           docker build \
             --pull \
             --no-cache \
-            --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
-            --build-arg "PRODUCT=podman" \
-            --build-arg "DISTRO_FAMILY=${{ matrix.distro_family }}" \
-            --build-arg "DISTRO=${{ matrix.distro }}" \
+            --build-arg "BASE_IMAGE=${{ matrix.target.base_image }}" \
+            --build-arg "PRODUCT=${{ matrix.product }}" \
+            --build-arg "DISTRO_FAMILY=${{ matrix.target.distro_family }}" \
+            --build-arg "DISTRO=${{ matrix.target.distro }}" \
             --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
             --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
+            --build-arg "TARGET_ARCH=${{ matrix.target.arch }}" \
             --build-arg "PODMAN_TAG=${PODMAN_TAG}" \
             --build-arg "UPSTREAM_SHA256=${UPSTREAM_SHA256}" \
-            --build-arg "TARGET_ARCH=${{ matrix.arch }}" \
+            --build-arg "NETAVARK_TAG=${NETAVARK_TAG}" \
+            --build-arg "NETAVARK_UPSTREAM_SHA256=${NETAVARK_UPSTREAM_SHA256}" \
+            --build-arg "NETAVARK_VENDOR_SHA256=${NETAVARK_VENDOR_SHA256}" \
+            --build-arg "AARDVARK_TAG=${AARDVARK_TAG}" \
+            --build-arg "AARDVARK_UPSTREAM_SHA256=${AARDVARK_UPSTREAM_SHA256}" \
+            --build-arg "AARDVARK_VENDOR_SHA256=${AARDVARK_VENDOR_SHA256}" \
+            --build-arg "RUST_VERSION=${RUST_VERSION}" \
+            --build-arg "CRUN_TAG=${CRUN_TAG}" \
+            --build-arg "CRUN_VERSION=${CRUN_VERSION}" \
+            --build-arg "CRUN_ARCHIVE_SHA256=${CRUN_ARCHIVE_SHA256}" \
+            --build-arg "CONMON_TAG=${CONMON_TAG}" \
+            --build-arg "CONMON_VERSION=${CONMON_VERSION}" \
+            --build-arg "CONMON_ARCHIVE_SHA256=${CONMON_ARCHIVE_SHA256}" \
+            --build-arg "CONTAINERS_STORAGE_TAG=${CONTAINERS_STORAGE_TAG}" \
+            --build-arg "CONTAINERS_STORAGE_VERSION=${CONTAINERS_STORAGE_VERSION}" \
+            --build-arg "CONTAINERS_STORAGE_ARCHIVE_SHA256=${CONTAINERS_STORAGE_ARCHIVE_SHA256}" \
             --target artifact-export \
             --output "type=local,dest=output" \
             --file docker/Dockerfile \
@@ -139,44 +138,151 @@ jobs:
       - name: Upload .deb artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: debs-${{ matrix.distro }}-${{ matrix.arch }}
-          path: output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/*.deb
+          name: ${{ matrix.product }}-debs-${{ matrix.target.distro }}-${{ matrix.target.arch }}
+          path: output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.target.arch }}/*.deb
           retention-days: 7
           if-no-files-found: error
       - name: Upload build metadata
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: metadata-${{ matrix.distro }}-${{ matrix.arch }}
+          name: ${{ matrix.product }}-metadata-${{ matrix.target.distro }}-${{ matrix.target.arch }}
           path: |
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/SHA256SUMS
-            output/${{ matrix.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.arch }}/build.log
+            output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.target.arch }}/SHA256SUMS
+            output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/${{ matrix.target.arch }}/build.log
           retention-days: 30
           if-no-files-found: warn
 
+  # containers-common is Architecture: all — one build per distro, no compile.
+  build-containers-common:
+    needs: prepare
+    if: inputs.component == 'main'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { distro_family: ubuntu, distro: noble,    base_image: 'ubuntu:noble' }
+          - { distro_family: ubuntu, distro: resolute, base_image: 'ubuntu:resolute' }
+          - { distro_family: debian, distro: trixie,   base_image: 'debian:trixie' }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build .deb package
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          BUILD_REVISION: ${{ needs.prepare.outputs.release_revision }}
+        run: |
+          set -euo pipefail
+          source packaging/versions.env
+          docker build \
+            --pull \
+            --no-cache \
+            --build-arg "BASE_IMAGE=${{ matrix.target.base_image }}" \
+            --build-arg "PRODUCT=containers-common" \
+            --build-arg "DISTRO_FAMILY=${{ matrix.target.distro_family }}" \
+            --build-arg "DISTRO=${{ matrix.target.distro }}" \
+            --build-arg "BUILD_VERSION=${BUILD_VERSION}" \
+            --build-arg "BUILD_REVISION=${BUILD_REVISION}" \
+            --build-arg "TARGET_ARCH=amd64" \
+            --build-arg "CONTAINERS_COMMON_TAG=${CONTAINERS_COMMON_TAG}" \
+            --build-arg "CONTAINERS_COMMON_VERSION=${CONTAINERS_COMMON_VERSION}" \
+            --build-arg "CONTAINERS_COMMON_ARCHIVE_SHA256=${CONTAINERS_COMMON_ARCHIVE_SHA256}" \
+            --target artifact-export \
+            --output "type=local,dest=output" \
+            --file docker/Dockerfile \
+            .
+      - name: List built artifacts
+        run: find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: containers-common-debs-${{ matrix.target.distro }}-all
+          path: output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/*.deb
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: containers-common-metadata-${{ matrix.target.distro }}-all
+          path: |
+            output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/SHA256SUMS
+            output/${{ matrix.target.distro }}/${{ needs.prepare.outputs.build_version }}/amd64/build.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  # passt is not built: exact, checksum-pinned Ubuntu and Debian binaries.
+  fetch-passt:
+    needs: prepare
+    if: inputs.component == 'extra'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned passt .deb packages
+        run: |
+          set -euo pipefail
+          for origin in ubuntu debian; do
+            for arch in amd64 arm64; do
+              ./scripts/fetch-passt-deb.sh "${origin}" "${arch}" output
+            done
+          done
+          find output/ -type f | sort
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: passt-debs-pinned
+          path: output/*.deb
+          retention-days: 7
+          if-no-files-found: error
+
   publish:
-    needs: [prepare, build]
+    needs: [prepare, build-compiled, build-containers-common, fetch-passt]
+    # The component-gated jobs are skipped for the other component; everything
+    # that ran must have succeeded.
+    if: >-
+      ${{ !cancelled()
+          && needs.prepare.result == 'success'
+          && needs.build-compiled.result == 'success'
+          && contains(fromJSON('["success","skipped"]'), needs.build-containers-common.result)
+          && contains(fromJSON('["success","skipped"]'), needs.fetch-passt.result) }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      COMPONENT: ${{ needs.prepare.outputs.component }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     steps:
+      - uses: actions/checkout@v4
       - name: Download all .deb artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: debs-*
+          pattern: '*-debs-*'
           path: debs
           merge-multiple: true
+      - name: Verify every package belongs to the ${{ needs.prepare.outputs.component }} component
+        run: |
+          set -euo pipefail
+          # packaging/repo/components is the single source of truth for the APT
+          # layout; a release must only carry packages of its own component.
+          status=0
+          for deb in debs/*.deb; do
+            pkg=$(dpkg-deb -f "${deb}" Package)
+            comp=$(awk -v p="${pkg}" '$1==p{print $2}' packaging/repo/components)
+            if [[ ${comp} != "${COMPONENT}" ]]; then
+              echo "::error::$(basename "${deb}"): package ${pkg} is in component '${comp:-<unlisted>}', not '${COMPONENT}'"
+              status=1
+            fi
+          done
+          exit "${status}"
       - name: Normalize release asset filenames
         run: |
+          set -euo pipefail
           cd debs
           shopt -s nullglob
           for file in *.deb; do
             # GitHub release uploads normalize '~' to '.', so do the same before
             # checksums are generated.
             normalized="${file//\~/.}"
-            if [[ "${normalized}" == "${file}" ]]; then
-              continue
-            fi
+            [[ "${normalized}" == "${file}" ]] && continue
             if [[ -e "${normalized}" ]]; then
               echo "::error::Cannot rename ${file} to ${normalized}; target already exists"
               exit 1
@@ -185,42 +291,62 @@ jobs:
           done
       - name: Generate checksums
         run: |
+          set -euo pipefail
           cd debs
           find . -name '*.deb' -exec sha256sum {} \; | sed 's|  \./|  |' | sort > SHA256SUMS
           echo "--- SHA256SUMS ---"
           cat SHA256SUMS
       - name: Upload assets to draft release
         run: |
-          RELEASE_TAG="${{ needs.prepare.outputs.release_tag }}"
-
           gh release upload "${RELEASE_TAG}" \
-            --repo "${{ github.repository }}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --clobber \
             debs/*.deb debs/SHA256SUMS
       - name: Publish release
+        env:
+          PODMAN_VERSION: ${{ needs.prepare.outputs.podman_version }}
+          BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+          RELEASE_REVISION: ${{ needs.prepare.outputs.release_revision }}
         run: |
-          PODMAN_VERSION="${{ needs.prepare.outputs.podman_version }}"
-          PODMAN_TAG="${{ needs.prepare.outputs.podman_tag }}"
-          BUILD_VERSION="${{ needs.prepare.outputs.build_version }}"
-          RELEASE_REVISION="${{ needs.prepare.outputs.release_revision }}"
-          RELEASE_TAG="${{ needs.prepare.outputs.release_tag }}"
-
+          set -euo pipefail
+          source packaging/versions.env
+          case "${COMPONENT}" in
+            main)
+              summary="Everything a working Podman ${PODMAN_VERSION} install needs: podman, podman-remote and podman-docker plus the companions podman's versioned Depends require. APT component \`main\`."
+              packages="- podman, podman-remote, podman-docker ${PODMAN_VERSION}
+          - netavark ${NETAVARK_TAG#v}
+          - aardvark-dns ${AARDVARK_TAG#v}
+          - golang-github-containers-common ${CONTAINERS_COMMON_VERSION} (\`Architecture: all\`)
+          - containers-storage ${CONTAINERS_STORAGE_VERSION}" ;;
+            extra)
+              summary="Optional newer builds for Podman ${PODMAN_VERSION}; the distro versions already satisfy podman's dependencies. APT component \`extra\`."
+              packages="- passt ${PASST_VERSION} (exact Ubuntu and Debian binaries)
+          - crun ${CRUN_VERSION}
+          - conmon ${CONMON_VERSION}" ;;
+          esac
           gh release edit "${RELEASE_TAG}" \
-            --repo "${{ github.repository }}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --draft=false \
             --prerelease \
-            --title "Podman ${PODMAN_VERSION} .deb packages - ${BUILD_VERSION}-${RELEASE_REVISION}" \
+            --title "Podman ${PODMAN_VERSION} ${COMPONENT} component .deb packages - ${BUILD_VERSION}-${RELEASE_REVISION}" \
             --notes "$(cat <<EOF
-          ## Podman ${PODMAN_VERSION} .deb packages
+          ## Podman ${PODMAN_VERSION} — \`${COMPONENT}\` component .deb packages
 
-          Targets (amd64 and arm64):
+          ${summary}
+
+          Packages (amd64 and arm64):
+          ${packages}
+
+          Targets:
           - Ubuntu 24.04 (noble)
           - Ubuntu 26.04 (resolute)
           - Debian 13 (trixie)
 
           Build date: ${BUILD_VERSION}
           Build revision: ${RELEASE_REVISION}
-          Upstream tag: ${PODMAN_TAG}
+
+          Install via the APT repository (see the README); this release is the
+          repository's storage layer.
 
           ### SHA256 Checksums
           \`\`\`

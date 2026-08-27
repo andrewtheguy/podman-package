@@ -12,7 +12,9 @@
 #   3. Every component x architecture named in Release has a Packages index,
 #      and no index exists for a component Release does not name.
 #   4. Every Packages stanza points at a pool file with the listed Size and
-#      SHA256, and Packages.gz decompresses to exactly Packages.
+#      SHA256, and every compressed sibling (Packages.gz/.xz/.bz2) decompresses
+#      to exactly Packages.
+# A dists/ with no suites is a failure too — an empty repository must not pass.
 # Any mismatch exits 1 so an inconsistent repository never reaches GitHub Pages.
 #
 # Environment: KEYRING_NAME (default: podman-package)
@@ -37,12 +39,13 @@ verify_sig() { # <signature-or-clearsigned> [<signed-file>]
   fi
 }
 
-checks=0 failures=0
+checks=0 failures=0 suites=0
 fail() { echo "  MISMATCH: $*" >&2; failures=$((failures + 1)); }
 
 echo ">>> Verifying repository at ${REPO_ROOT}"
 shopt -s nullglob
 for suite_dir in "${REPO_ROOT}"/dists/*/; do
+  suites=$((suites + 1))
   suite=$(basename "${suite_dir}")
   release="${suite_dir}Release"
   echo ">>> Suite ${suite}"
@@ -104,10 +107,17 @@ for suite_dir in "${REPO_ROOT}"/dists/*/; do
 
   # 4. Packages <-> pool
   for pkgs in "${suite_dir}"*/binary-*/Packages; do
-    if [[ -f ${pkgs}.gz ]]; then
+    # Every compressed variant apt might fetch must decode to the same index.
+    for packed in "${pkgs}".*; do
       checks=$((checks + 1))
-      gzip -dc "${pkgs}.gz" | cmp -s - "${pkgs}" || fail "${suite}: ${pkgs#"${suite_dir}"}.gz != Packages"
-    fi
+      case ${packed##*.} in
+        gz)  decompress=(gzip -dc) ;;
+        xz)  decompress=(xz -dc) ;;
+        bz2) decompress=(bzip2 -dc) ;;
+        *)   fail "${suite}: ${packed#"${suite_dir}"} uses an unsupported compression format"; continue ;;
+      esac
+      "${decompress[@]}" "${packed}" | cmp -s - "${pkgs}" || fail "${suite}: ${packed#"${suite_dir}"} != Packages"
+    done
     while read -r filename size sha; do
       [[ -n ${filename} ]] || continue
       checks=$((checks + 1))
@@ -124,6 +134,9 @@ for suite_dir in "${REPO_ROOT}"/dists/*/; do
   done
 done
 shopt -u nullglob
+
+checks=$((checks + 1))
+[[ ${suites} -gt 0 ]] || fail "no suite directories under dists/ — an empty repository is not publishable"
 
 if [[ ${failures} -gt 0 ]]; then
   echo ">>> FAIL: ${failures} mismatch(es) across ${checks} checks — refusing to publish" >&2

@@ -25,6 +25,12 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    # Tag reservation (`gh release view` loop + draft creation) must not race:
+    # two concurrent runs of the same component would otherwise pick the same
+    # revision. Serialize only this job so builds themselves still run in parallel.
+    concurrency:
+      group: release-tag-${{ inputs.component }}
+      cancel-in-progress: false
     outputs:
       component: ${{ inputs.component }}
       build_version: ${{ steps.vars.outputs.build_version }}

@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-Usage: ./scripts/build-deb.sh <package> <distro> <version>
+Usage: ./scripts/build-deb.sh <package> <distro-family> <suite>
 
 Packages:
   podman
@@ -68,7 +68,7 @@ else
   ARCHES=("arm64" "amd64")
 fi
 
-OUTPUT_ROOT="${REPO_ROOT}/output"
+OUTPUT_ROOT="${REPO_ROOT}/output/${DISTRO_FAMILY}"
 BUILD_VERSION="$(date -u +%Y%m%d)"
 VERSION_CONFIG="${REPO_ROOT}/packaging/versions.env"
 PATCH_SOURCE_DIR="${REPO_ROOT}/packaging/${PRODUCT}/${DISTRO_FAMILY}/${DISTRO}/patches"

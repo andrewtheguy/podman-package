@@ -1,15 +1,17 @@
 # Podman `.deb` Package Builders
 
-This repository builds current Podman releases and their supporting components
-as installable `.deb` packages for Ubuntu and Debian on `amd64` and `arm64`.
-Source-built packages use Docker, pinned upstream sources, and distro packaging
-to keep builds isolated and reproducible. The `extra` component also includes
-exact, checksum-pinned Ubuntu and Debian `passt` binary packages.
+This repository builds pinned Podman and supporting-component releases as
+installable `.deb` packages for Ubuntu and Debian on `amd64` and `arm64`.
+Source-built packages use Docker, checksum-pinned upstream sources, and distro
+packaging to keep builds isolated. Distro source packages and build dependencies
+are resolved when a build runs, so the output is not promised to be
+byte-for-byte reproducible. The `extra` component also includes exact,
+checksum-pinned Ubuntu and Debian `passt` binary packages.
 
 The project is APT-first: the deliverable is the signed APT repository with a
-`main` component (Podman and everything it requires) and an `extra` component
-(optional newer passt, crun, conmon). GitHub releases exist only as the
-repository's storage layer, one release per component build.
+`main` component (Podman and its version-pinned companion packages) and an
+`extra` component (optional newer passt, crun, conmon). GitHub releases exist
+only as the repository's storage layer, one release per component build.
 
 ## Install via APT (maintainer's personal repository)
 
@@ -23,11 +25,14 @@ repository's storage layer, one release per component build.
 > point production systems at my repository.
 
 The repository is served from GitHub Pages at
-<https://andrewtheguy.github.io/podman-package/> and is rebuilt from the three
-most recent `main` component releases and the three most recent `extra`
-component releases by the **Publish APT Repository** workflow. apt installs the newest version; the older
-ones stay downloadable — so a slightly stale `apt update` still resolves — and
-pinnable (`sudo apt install podman=6.0.1+20260709-1~noble`) until they rotate out.
+<https://andrewtheguy.github.io/podman-package/> and is rebuilt by the
+**Publish APT Repository** workflow from up to three of the most recently
+published `main` releases and up to three of the most recently published
+`extra` releases. If fewer exist, it uses every available matching release.
+apt installs the newest indexed version; retained older versions stay
+downloadable — so a slightly stale `apt update` still resolves — and pinnable
+with `sudo apt install podman=<version>` until they rotate out. Use
+`apt-cache madison podman` to list the versions currently indexed.
 
 ```bash
 # 1. Signing key
@@ -60,7 +65,7 @@ build workflow:
 
 | Component | Packages | Purpose |
 |-----------|----------|---------|
-| `main` | podman, podman-remote, podman-docker, netavark, aardvark-dns, golang-github-containers-common, containers-storage | Everything a working Podman 6 needs. `Components: main` alone gives a complete install — podman's versioned `Depends` are satisfied from here, and its runtime/monitor come from the distro's own crun (or runc) and conmon. |
+| `main` | podman, podman-remote, podman-docker, netavark, aardvark-dns, golang-github-containers-common, containers-storage | Podman and the repo-built companions named by its versioned `Depends`. `Components: main` alone gives a complete install because the remaining runtime/monitor dependencies come from the distro's own crun (or runc) and conmon. |
 | `extra` | passt, crun, conmon | Optional newer builds. The distro versions already satisfy podman's dependencies; add the component to install the current upstream releases instead (the pinned passt includes newer `pasta` fixes). |
 
 Use `Components: main` if you only want Podman and its required companions, or
@@ -108,17 +113,16 @@ The GitHub releases mirror the APT components, one release per component build:
 - [`extra` component releases](https://github.com/andrewtheguy/podman-package/releases?q=%22extra+component%22) (`extra-<YYYYMMDD>-<N>`) — passt, crun, and conmon: optional newer builds.
 - [All releases](https://github.com/andrewtheguy/podman-package/releases) — the combined chronological GitHub release history.
 
-For a complete Podman 6 installation without APT, download the `.deb`s for your
-distro and architecture from the latest `main` release; add the `extra` release
-if you want the newer passt/crun/conmon.
+For a complete Podman 6.1 installation without this APT repository, download
+the `.deb`s for your distro and architecture from the latest `main` release;
+add the `extra` release if you want the newer passt/crun/conmon.
 
 netavark (Rust network stack), aardvark-dns (Rust DNS server),
-containers-common (config files), and containers-storage (storage CLI + `storage.conf`) are
-**required companions of Podman 6.0** — Podman 6 will not provide container
-networking or name resolution without netavark/aardvark-dns and needs config
-matching its release. They are therefore part of the `main` component, **built
-and released for all targets** (the distro repositories do not provide versions
-new enough for Podman 6). Install them together on each target.
+containers-common (config files), and containers-storage (storage CLI +
+`storage.conf`) are versioned dependencies of the Podman package built here.
+They are therefore part of the `main` component and are **built and released for
+all targets**. Installing Podman from the repository pulls in the pinned minimum
+versions declared in its package metadata.
 
 crun (C OCI runtime) and conmon (container monitor) are **recommended, not
 required**: Podman uses crun as its default runtime and conmon to monitor
@@ -128,24 +132,24 @@ built and released here for all targets so you can pull in the current releases
 when you want them.
 
 passt provides the `pasta` user-mode networking backend. The `extra` release
-includes exact `0.0~git20260611.a9c61ff-1` Ubuntu Launchpad and Debian snapshot
+includes exact `0.0~git20260728.f8df3f1-1` Ubuntu Launchpad and Debian snapshot
 binaries for `amd64` and `arm64`; every URL and SHA-256 is pinned in
 `packaging/versions.env`. The release asset name identifies the binary's
 `ubuntu` or `debian` origin without changing the package contents.
 
-Podman, the two Rust components, crun, conmon, and containers-storage follow the same
-pattern (distro `debian/` packaging + pinned upstream source + repo-managed
+Podman, the two Rust components, crun, conmon, and containers-storage follow the
+same pattern (distro `debian/` packaging + pinned upstream source + repo-managed
 patches + a self-installed toolchain where needed); crun builds from its
 self-contained upstream release tarball (autotools, system libs), conmon builds
 from its upstream tag archive with the target distro's packaging, and
-containers-common is `Architecture: all` and needs no compilation (config files +
-man pages only).
+containers-common is `Architecture: all` and needs no compilation (config files
+and man pages only).
 
-> **Why containers-storage matters:** Podman 6.0's storage library (v1.63.0)
-> honors an explicitly-set `graphroot` even for rootless users (it no longer
-> remaps it to `$HOME`). The distros' older `containers-storage` ships a
+> **Why containers-storage matters:** Podman 6.1.0 embeds storage library
+> v1.64.0. Its configuration parser honors an explicitly set `graphroot` even
+> for rootless users. The distros' older `containers-storage` packages ship a
 > `/usr/share/containers/storage.conf` with `graphroot` hardcoded to
-> `/var/lib/containers/storage`, so rootless Podman 6.0 hits a root-owned path →
+> `/var/lib/containers/storage`, so rootless Podman 6.1 hits a root-owned path →
 > *permission denied*. The v1.63.0 `storage.conf` built here leaves
 > `graphroot`/`runroot` commented out, so rootless Podman falls back to its
 > per-user default.
@@ -164,8 +168,8 @@ All compiled packages build for both architectures: `amd64` and `arm64`.
 containers-common is `Architecture: all` (one build per distro). passt is
 provided as exact Ubuntu and Debian binaries for both architectures. Every
 source-built product targets all three distributions — and on each target
-Podman 6.0 needs the matching netavark, aardvark-dns, and containers-common
-installed alongside it.
+the Podman package's versioned dependencies require the repository's netavark,
+aardvark-dns, containers-common, and containers-storage packages.
 
 | Platform | Codename |
 |----------|----------|
@@ -188,15 +192,16 @@ component being released.
 
 A second workflow, **Publish APT Repository** (`.github/workflows/publish-apt-repo.yml`),
 runs automatically after a successful build (and can be dispatched manually).
-It downloads the `.deb` assets of the `keep_releases` most recent `main` and
-`extra` releases (default 3 of each; a dispatch can instead pin exactly one
+It downloads the `.deb` assets of up to the `keep_releases` most recent `main`
+and `extra` releases (default 3 of each; a dispatch can instead pin exactly one
 `main_release` / `extra_release` tag), assembles and signs an
 APT repository with every downloaded version indexed into the `main` and `extra`
 components, smoke-installs from it inside `noble`, `resolute`, and `trixie`
 containers (once with `main extra`, once with `main` alone to prove the split
-holds), and deploys the result to GitHub Pages. Each publish replaces the whole site, so a version is
-gone once it falls outside the retention window — the GitHub Release itself
-keeps every `.deb` forever. See
+holds), and deploys the result to GitHub Pages. Each publish replaces the whole
+site, so a version is gone once it falls outside the retention window. Its
+release assets remain downloadable from GitHub unless the release or assets are
+manually deleted. See
 [Hosting Your Own APT Repository](#hosting-your-own-apt-repository) for the
 one-time setup it needs.
 
@@ -284,8 +289,9 @@ done
 
 Retention is a size trade-off: one `main` release plus one `extra` release is
 roughly 215 MB across all suites and architectures, so the default of three each
-keeps the site around 650 MB, under GitHub Pages' ~1 GB guideline. Raise
-`keep_releases` with care.
+keeps the site around 650 MB, below the
+[GitHub Pages 1 GB published-site limit](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits).
+Raise `keep_releases` with care.
 
 ### Signing Key
 
@@ -302,9 +308,10 @@ detached as `Release.gpg`). `Release` lists the size and SHA256/SHA512 of every
 `Packages` index, and each `Packages` stanza lists the size and SHA256 of its
 `.deb`. That hash chain — signed `InRelease` → `Packages` → `.deb` — is what apt
 verifies on `apt update` and `apt install`, so a single signature covers the whole
-suite and any modified byte anywhere (on GitHub Pages, in transit, in a CDN
-cache) makes apt reject the download. The `.deb` files themselves carry no
-signature.
+suite. Modifying signed metadata, an indexed package list, or a referenced
+`.deb` makes apt reject the affected update or download. Files outside that hash
+chain, such as the HTML landing page, are not covered. The `.deb` files
+themselves carry no signature.
 
 **Key properties.** RSA-4096, sign-only, **no passphrase** (the workflow must use
 it non-interactively; a passphrase would just be a second secret stored beside
@@ -320,10 +327,11 @@ matching secret key is not in the keyring it aborts. A fork that keeps the
 upstream `pubkey.asc` but supplies its own secret fails loudly instead of
 publishing a repository nobody can verify.
 
-**Backup.** The private key exists only on the machine that generated it and in
-the GitHub secret (which cannot be read back). Store `keys/` somewhere safe
-(password manager, encrypted backup). Losing it does not affect existing
-installs, but no further publishes can be signed until you rotate.
+**Backup.** After generation, the private key is stored in the local gitignored
+`keys/` directory and uploaded to the GitHub secret (whose value cannot be read
+back). Store an independent encrypted backup. Losing every usable copy does not
+affect already published metadata, but no further publish can be signed until
+you rotate.
 
 **Rotation (lost, leaked, or scheduled).**
 
@@ -337,9 +345,10 @@ gh workflow run "Publish APT Repository"                       # re-sign the rep
 Every client must then re-download the keyring
 (`sudo curl -fsSL -o /etc/apt/keyrings/podman-package.gpg <repo-url>/podman-package.gpg`);
 until they do, `apt update` fails with `NO_PUBKEY` for this source. That is the
-intended behavior — rotation is the only way to revoke trust in a leaked key,
-since the key has no expiry. If the key leaked, rotate immediately: anyone
-holding it could publish packages that your clients would trust.
+intended behavior. Replacing a client's keyring removes its trust in the old
+key; clients that have not installed the new key still trust signatures made by
+the leaked key. If the key leaked, rotate immediately: anyone holding it could
+publish packages that clients retaining the old key would trust.
 
 Repository layout notes:
 
@@ -365,7 +374,7 @@ Repository layout notes:
 Use one explicit Buildx entrypoint:
 
 ```bash
-./scripts/build-deb.sh <package> <distro> <version>
+./scripts/build-deb.sh <package> <distro-family> <suite>
 ```
 
 Packages:
@@ -408,28 +417,32 @@ binaries the `extra` component ships:
 - Shared in-container dispatcher: `scripts/container/build.sh`
 - Product build modules: `scripts/container/products/`
 - Shared Dockerfile: `docker/Dockerfile`
-- Package patch hierarchy: `packaging/<package>/<distro>/<version>/patches/`
+- Package patch hierarchy: `packaging/<package>/<distro-family>/<suite>/patches/`
 
 ## Output Contract
 
-All artifacts are written to:
+Source-build artifacts are written to:
 
-`output/<distro>/<version>/<architecture>/`
+`output/<distro-family>/<suite>/<build-date>/<architecture>/`
 
 Where:
-- `<distro>` is a supported codename from the Support Matrix above
-- `<version>` is UTC date in `YYYYMMDD` format from `date -u +%Y%m%d`
+- `<distro-family>` is `ubuntu` or `debian`
+- `<suite>` is a supported codename from the Support Matrix above
+- `<build-date>` is the UTC date in `YYYYMMDD` format from `date -u +%Y%m%d`
 - `<architecture>` is `amd64` or `arm64`
 
 Example UTC date version:
 - `20260216` (Monday, February 16, 2026 UTC)
 
 Same-day rerun behavior:
-- Each build invocation deletes its own `output/<distro>/<YYYYMMDD>/` directory before rebuilding.
-- This intentionally replaces same-day artifacts for that distro.
+- Each local build invocation deletes
+  `output/<distro-family>/<suite>/<YYYYMMDD>/` before rebuilding.
+- This intentionally replaces all same-day local artifacts already present for
+  that distro family and suite.
 
 Per-architecture run behavior:
-- Architecture workflows run sequentially in order: arm64, then amd64.
+- Local compiled-package builds run sequentially in order: arm64, then amd64.
+- `containers-common` is `Architecture: all` and therefore runs only through the amd64 builder.
 - Each architecture run is isolated.
 - Artifacts for an architecture are exported as soon as that architecture finishes.
 - If one architecture fails, the script stops before attempting remaining architectures and exits non-zero at the end.
@@ -442,25 +455,26 @@ Per-architecture run behavior:
 - Uses `--pull --no-cache` for each build to ensure fresh apt metadata/security updates on every run.
 - Uses pinned upstream inputs from `packaging/versions.env`.
 - Downloads the exact pinned Ubuntu and Debian passt `.deb`s and verifies their SHA-256 hashes and package metadata.
-- Derives Go toolchain version from upstream Podman `go.mod`.
+- Derives the Go toolchain version from upstream `go.mod` for Podman and containers-storage.
 - Injects distro packaging (`debian/`) into upstream Podman source.
 - Applies repository-managed patch series only (no runtime fallback).
-- Forces deterministic container build flags:
+- Uses consistent container build settings:
   - `DEB_BUILD_OPTIONS="nocheck noautodbgsym"`
-  - `GOTELEMETRY=off`
+  - `GOTELEMETRY=off` for Go builds
 - Writes `SHA256SUMS` in each arch directory.
-- Writes `manifest.txt` at `output/<distro>/<YYYYMMDD>/manifest.txt`.
+- Writes `manifest.txt` at
+  `output/<distro-family>/<suite>/<YYYYMMDD>/manifest.txt`.
 
 ## Deterministic Patch Policy
 
 No runtime fallback or auto-detection is used.
 
 Patch directory convention:
-- `packaging/<package>/<distro>/<version>/patches/series`
-- `packaging/<package>/<distro>/<version>/patches/*.patch`
+- `packaging/<package>/<distro-family>/<suite>/patches/series`
+- `packaging/<package>/<distro-family>/<suite>/patches/*.patch`
 
 Notes:
-- Each workflow uses its own `series` file exactly as-is.
+- Each target build uses its own `series` file exactly as-is.
 - Empty `series` means patch application is skipped.
 
 ## Version Pinning
@@ -470,11 +484,11 @@ Pinned upstream input config:
 
 ```bash
 # passt (exact distro-built binary packages)
-PASST_VERSION=0.0~git20260611.a9c61ff-1
-PASST_UBUNTU_AMD64_SHA256=5437f1c07f3fe95d2eab577c69c0702d4b939e394936c09592b0502d0b0b19c1
-PASST_UBUNTU_ARM64_SHA256=cbd9f3836e3e2845108bb4777e206b01d7bcbd0425107751f2643d96060b7a90
-PASST_DEBIAN_AMD64_SHA256=ac4bee1cf1713e7fdf0bb563da0c1c64fd91a4c9e31b1d180d69b084737269b1
-PASST_DEBIAN_ARM64_SHA256=5111e1039287cbab8ea2b1557bf89296d6b928edabf322d05fa811e8e31871a4
+PASST_VERSION=0.0~git20260728.f8df3f1-1
+PASST_UBUNTU_AMD64_SHA256=6dbd1d18e0f0ae5990e1b3d6369e04410c0934742ae144b7ce7b403138d2414a
+PASST_UBUNTU_ARM64_SHA256=41d239f7c5650388d8588de127e7324bc8ffcca8f2f85b08702dde9ca09995d3
+PASST_DEBIAN_AMD64_SHA256=141ccaa22e36c36a71221458f432fadc90d5f17c53f005ae7d84de963d5bd489
+PASST_DEBIAN_ARM64_SHA256=1121baf65be564bd3bc54dd121f27f609f8b61746567c17224fbba08401b0405
 
 # Podman (Go)
 PODMAN_TAG=v6.1.0
@@ -515,8 +529,8 @@ CONTAINERS_STORAGE_ARCHIVE_SHA256=3a0f119a5abb11ff45e49793243278075c5ab5c409dd93
 Notes:
 - All orchestrators source this file directly.
 - passt pins four exact binary URLs and hashes: Ubuntu `amd64`/`arm64` from the
-  Launchpad build of `0.0~git20260611.a9c61ff-1`, and Debian `amd64`/`arm64`
-  from the immutable `20260612T203416Z` snapshot. The fetcher verifies the
+  Launchpad build of `0.0~git20260728.f8df3f1-1`, and Debian `amd64`/`arm64`
+  from the immutable `20260728T202839Z` snapshot. The fetcher verifies the
   SHA-256 plus the package name, version, and architecture.
 - `PODMAN_TAG` / `NETAVARK_TAG` control upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
@@ -525,7 +539,8 @@ Notes:
   curl -fsSL -L "https://github.com/podman-container-tools/podman/archive/refs/tags/v<VERSION>.tar.gz" | sha256sum
   ```
   Use the hex string from the output as the `UPSTREAM_SHA256` value.
-- Go is not separately pinned; it is read from upstream `go.mod` for the pinned Podman tag.
+- Go is not separately pinned; Podman and containers-storage each derive it
+  from the `go.mod` in their pinned source.
 - For netavark, both checksums are required:
   - `NETAVARK_UPSTREAM_SHA256` matches the GitHub source archive
     (`.../netavark/archive/refs/tags/v<VERSION>.tar.gz`).
@@ -574,19 +589,21 @@ Notes:
 
 ```text
 output/
-  <distro>/
-    <YYYYMMDD>/
-      manifest.txt
-      <arch>/
-        *.deb
-        *.changes
-        *.buildinfo
-        build.log
-        SHA256SUMS
+  <distro-family>/
+    <suite>/
+      <YYYYMMDD>/
+        manifest.txt
+        <arch>/
+          *.deb
+          *.changes
+          *.buildinfo
+          build.log
+          SHA256SUMS
 ```
 
 Where:
-- `<distro>` is a supported codename from the Support Matrix above
+- `<distro-family>` is `ubuntu` or `debian`
+- `<suite>` is a supported codename from the Support Matrix above
 - `<YYYYMMDD>` is the UTC build version (for example `20260216`)
 - `<arch>` is `amd64` or `arm64`
 
@@ -594,7 +611,10 @@ Where:
 
 GitHub Actions (default):
 - Repository with Actions enabled and `contents: write` permission for the workflow.
-- Native `arm64` runners require a GitHub Team/Enterprise plan or a public repository.
+- Access to the standard
+  [`ubuntu-24.04-arm` GitHub-hosted runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+  used by the build matrix; private repositories consume Actions minutes for
+  that runner.
 - For the APT repository: GitHub Pages enabled with source "GitHub Actions", the
   `GPG_PRIVATE_KEY` secret, and your own `packaging/repo/pubkey.asc` (see
   [Hosting Your Own APT Repository](#hosting-your-own-apt-repository)).
@@ -602,12 +622,10 @@ GitHub Actions (default):
 Local builds:
 - Docker with Buildx support.
 
-Both methods require network access to:
-  - Ubuntu package repositories
-  - Debian package repositories
-  - Launchpad and snapshot.debian.org for pinned passt binaries
-  - Podman source tarballs on GitHub
-  - Go toolchain tarballs on `go.dev`
+Builds require network access to the target distro's package repositories,
+GitHub source archives, `go.dev` for Go builds, and `static.rust-lang.org` for
+Rust builds. Fetching passt additionally uses Launchpad or
+snapshot.debian.org. The workflows also use the GitHub API and Releases.
 
 ## Releases
 
@@ -623,14 +641,18 @@ After a run succeeds, **Publish APT Repository** republishes the GitHub Pages
 APT repository from the most recent releases of each component (see
 [Install via APT](#install-via-apt-maintainers-personal-repository)).
 
-Each run publishes a single unified pre-release containing every `.deb` it built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark, aardvark-dns, crun, conmon, and containers-storage carry both architectures; containers-common is the single `Architecture: all` `.deb`. No manual upload is needed.
+Each run publishes a single unified pre-release containing every `.deb` it
+built or fetched plus a combined `SHA256SUMS`. Podman, passt, netavark,
+aardvark-dns, crun, conmon, and containers-storage carry both architectures;
+containers-common produces one `Architecture: all` `.deb` per suite. No manual
+upload is needed.
 
 Package version format inside source-built `.deb`s:
 `<UPSTREAM_VERSION>+<YYYYMMDD>-<N>~<DISTRO>` (for example
-`6.0.0+20260415-1~trixie` or `2.0.0+20260415-1~trixie`). GitHub normalizes
+`6.1.0+20260827-1~trixie` or `2.0.0+20260827-1~trixie`). GitHub normalizes
 special characters in release asset filenames, so the workflow renames release
 assets before upload to use dots in the filename suffix (for example
-`6.0.0+20260415-1.trixie`) while leaving the package version inside the `.deb`
+`6.1.0+20260827-1.trixie`) while leaving the package version inside the `.deb`
 unchanged.
 
 ## Runtime Requirement for Newer `pasta` Features
@@ -642,13 +664,19 @@ Ubuntu 24.04 (`noble`):
 - Ubuntu noble currently provides `passt 0.0~git20240220.1e6f92b-1`, which is below that requirement.
 - For noble hosts that need this feature, install the `ubuntu` passt asset from
   the `extra` release (or `apt install passt` with the `extra` component). It is the exact pinned
-  [`0.0~git20260611.a9c61ff-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20260611.a9c61ff-1).
+  [`0.0~git20260728.f8df3f1-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20260728.f8df3f1-1).
+
+Ubuntu 26.04 (`resolute`):
+- The distro's `passt 0.0~git20260120.386b5f5-1` already provides
+  `--map-host-loopback`.
+- The `extra` component still replaces it with the July pin needed for Podman
+  6.1's Pesto forwarding syntax, described below.
 
 Debian 13 (`trixie`):
 - No workaround is required.
-- Debian trixie provides `passt 0.0~git20250503.587980c-2`, which satisfies the requirement above.
+- Debian trixie provides `passt 0.0~git20250503.587980c-2+deb13u1`, which satisfies the requirement above.
 - The `extra` release also provides the newer exact pinned
-  [`0.0~git20260611.a9c61ff-1` Debian forky binary](https://packages.debian.org/forky/passt)
+  [`0.0~git20260728.f8df3f1-1` Debian sid binary](https://snapshot.debian.org/package/passt/0.0~git20260728.f8df3f1-1/)
   from snapshot.debian.org.
 - Quick check:
 
@@ -681,7 +709,9 @@ Expected result for the Python server example above: `200`.
 If you intentionally curl a missing path, `404` is also a valid connectivity signal.
 A timeout or `000` means connectivity failed.
 
-This repository currently builds Podman packages only; it does not build or backport `passt` automatically.
+This repository does not rebuild passt from source. The `extra` workflow
+automatically downloads, verifies, and publishes the four exact Ubuntu and
+Debian binaries pinned in `packaging/versions.env`.
 
 ## Known Issue: Rootless IPv6 Publish Drops on Dynamic-Address Hosts
 
@@ -705,20 +735,25 @@ is not the problem; `pasta` does not track host address changes at runtime.
 
 ### Mitigation: `pesto` kernel-level port forwarding (Podman >= 6.1.0)
 
-Podman 6.1.0 adds IPv6 support to the experimental `pesto` rootless port
-forwarder. `pesto` DNATs published ports to the container's stable IP on its
-rootless bridge network instead of preserving the host destination address, and
-binds both `0.0.0.0` and `[::]` when no `HostIP` is given — so host address
-rotation cannot strand the forwarding path.
+[Podman 6.1.0](https://github.com/podman-container-tools/podman/releases/tag/v6.1.0)
+adds IPv6 support to the experimental `pesto` rootless port forwarder. `pesto`
+DNATs published ports to the container's stable IP on its rootless bridge
+network instead of preserving the host destination address, and binds both
+`0.0.0.0` and `[::]` when no `HostIP` is given — so host address rotation cannot
+strand the forwarding path.
 
 Requirements:
 
 - Podman >= 6.1.0 (this repository's builds satisfy this; see
   `packaging/versions.env`).
-- A passt package that ships the `pesto` binary:
-  `passt >= 0^20260507.g1afd4ed`. The pinned `extra` component binary
-  `0.0~git20260611.a9c61ff-1` satisfies this; distro-provided passt on
-  Ubuntu noble and Debian trixie does not.
+- passt `0.0~git20260728.f8df3f1-1` or newer. Merely shipping the `pesto`
+  binary is not enough: [Podman 6.1 emits target-address forwarding
+  rules](https://github.com/podman-container-tools/podman/blob/v6.1.0/vendor/go.podman.io/common/libnetwork/pasta/pesto_linux.go)
+  added upstream in July, and its IPv6 path also needs the later local-mode fix.
+  The pinned binaries use the upstream
+  [July 28 tag](https://passt.top/passt/tag/?h=2026_07_28.f8df3f1), which contains
+  both changes; the former June pin and the supported suites' older distro
+  packages do not.
 - The container must be on a rootless **bridge** network (a named network or a
   Quadlet `.network` unit referenced via `Network=`). Containers on the plain
   `pasta` default keep the startup-snapshot behavior described above.
@@ -731,9 +766,8 @@ rootless_port_forwarder = "pasta"
 
 This option is experimental in Podman 6.1.0 and its behavior may change.
 
-Caveat: the pinned passt snapshot (2026-06-11) ships `pesto` but predates
-upstream forwarding-rule and target-address-mapping work from July 2026. Before
-relying on the IPv6 `pesto` path, smoke-test it on the target host: publish a
-port from a container on a rootless bridge network, rotate or remove the host's
-IPv6 address, and confirm inbound IPv6 still reaches the container. If it does
-not, the passt pin needs a bump to a post-July-2026 snapshot.
+The July 28 pin is therefore the compatibility floor used by this repository,
+not just an optional newer passt. Before relying on the experimental IPv6 path,
+smoke-test it on the target host: publish a port from a container on a rootless
+bridge network, rotate or remove the host's IPv6 address, and confirm inbound
+IPv6 still reaches the container.

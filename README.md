@@ -22,7 +22,8 @@ dnf repository on GitHub Pages at
 
 ## Install via APT (maintainer's personal repository)
 
-> **Disclaimer — this APT repository is only for my own convenience.** It exists
+> [!WARNING]
+> **This APT repository is only for my own convenience.** It exists
 > so *I* can `apt install` these builds on my own machines. It is not a supported
 > distribution channel for anyone else: packages may change, break, or disappear
 > without notice, the signing key is mine, and I make no promises about uptime or

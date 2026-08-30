@@ -137,6 +137,7 @@ jobs:
       - name: Build and sign repository
         env:
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+          SIBLING_URL: https://andrewtheguy.github.io/podman-package-rpm/
         run: |
           set -euo pipefail
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')

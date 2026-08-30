@@ -29,6 +29,7 @@
 #                 (default: podman-package -> podman-package.gpg / .asc).
 #   ORIGIN        Release Origin/Label (default: podman-package).
 #   SOURCE_URL    Link to the source repository shown on index.html
+#   SIBLING_URL   Optional link to the sibling RPM repository shown on index.html
 #                 (default: derived from the git `origin` remote).
 #
 # Layout produced:
@@ -315,6 +316,7 @@ signing key and publish your own repository — the source repository's README e
 </div>
 HTML
   [[ -n ${SOURCE_URL} ]] && echo "<p>Source and build workflows: <a href=\"${SOURCE_URL}\">${SOURCE_URL}</a></p>"
+  [[ -n ${SIBLING_URL:-} ]] && echo "<p>RPM sibling for Amazon Linux 2023: <a href=\"${SIBLING_URL}\">${SIBLING_URL}</a></p>"
   cat <<HTML
 <h2>Usage</h2>
 <pre>sudo mkdir -p /etc/apt/keyrings

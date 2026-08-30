@@ -13,6 +13,13 @@ The project is APT-first: the deliverable is the signed APT repository with a
 `extra` component (optional newer passt, crun, conmon). GitHub releases exist
 only as the repository's storage layer, one release per component build.
 
+An RPM sibling, [podman-package-rpm](https://github.com/andrewtheguy/podman-package-rpm),
+builds the same pinned Podman stack for **Amazon Linux 2023** (`x86_64` and
+`aarch64`) with the same template — Docker builds, checksum-pinned upstream
+sources, the distro's own packaging, repo-managed patch series, and a signed
+dnf repository on GitHub Pages at
+<https://andrewtheguy.github.io/podman-package-rpm/>.
+
 ## Install via APT (maintainer's personal repository)
 
 > **Disclaimer — this APT repository is only for my own convenience.** It exists

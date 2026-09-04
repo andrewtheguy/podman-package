@@ -153,7 +153,7 @@ from its upstream tag archive with the target distro's packaging, and
 containers-common is `Architecture: all` and needs no compilation (config files
 and man pages only).
 
-> **Why containers-storage matters:** Podman 6.1.0 embeds storage library
+> **Why containers-storage matters:** Podman 6.1 embeds storage library
 > v1.64.0. Its configuration parser honors an explicitly set `graphroot` even
 > for rootless users. The distros' older `containers-storage` packages ship a
 > `/usr/share/containers/storage.conf` with `graphroot` hardcoded to
@@ -499,8 +499,8 @@ PASST_DEBIAN_AMD64_SHA256=141ccaa22e36c36a71221458f432fadc90d5f17c53f005ae7d84de
 PASST_DEBIAN_ARM64_SHA256=1121baf65be564bd3bc54dd121f27f609f8b61746567c17224fbba08401b0405
 
 # Podman (Go)
-PODMAN_TAG=v6.1.0
-UPSTREAM_SHA256=e086183db2f852476a7fa2580d0276cef32086b4cf17ae7020948f06eb613e0d
+PODMAN_TAG=v6.1.1
+UPSTREAM_SHA256=3646384ab6eff7b3d4473e1a0c1e34b6a8001e5a89600af44cc12376da77bccc
 
 # netavark (Rust)
 NETAVARK_TAG=v2.0.0

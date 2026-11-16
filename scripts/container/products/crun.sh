@@ -17,7 +17,7 @@ crun_validate_inputs() {
   : "${CRUN_VERSION:?CRUN_VERSION is required}"
   : "${CRUN_ARCHIVE_SHA256:?CRUN_ARCHIVE_SHA256 is required}"
 
-  # crun tags are the bare version (e.g. "1.28" or "1.14.4"); no leading "v".
+  # crun tags are the bare version (e.g. "1.31" or "1.14.4"); no leading "v".
   [[ "${CRUN_VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || die "invalid crun version: ${CRUN_VERSION}"
   [[ "${CRUN_TAG}" == "${CRUN_VERSION}" ]] || die "crun tag (${CRUN_TAG}) must equal version (${CRUN_VERSION})"
 }
@@ -25,7 +25,7 @@ crun_validate_inputs() {
 crun_install_prereqs() {
   # crun is plain C (autotools). The upstream release tarball is a self-contained
   # dist tree (configure + bundled libocispec/blake3), so no autoreconf is needed.
-  # Mandatory libs at 1.28: json-c, libseccomp, libsystemd, libcap. blake3 is
+  # Mandatory libs at 1.31: json-c, libseccomp, libsystemd, libcap. blake3 is
   # embedded and CRIU is disabled (see crun_patch_debian_rules).
   install_packages \
     build-essential \

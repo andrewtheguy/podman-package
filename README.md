@@ -140,7 +140,7 @@ built and released here for all targets so you can pull in the current releases
 when you want them.
 
 passt provides the `pasta` user-mode networking backend. The `extra` release
-includes exact `0.0~git20260728.f8df3f1-1` Ubuntu Launchpad and Debian snapshot
+includes exact `0.0~git20261002.cba3570-1` Ubuntu Launchpad and Debian snapshot
 binaries for `amd64` and `arm64`; every URL and SHA-256 is pinned in
 `packaging/versions.env`. The release asset name identifies the binary's
 `ubuntu` or `debian` origin without changing the package contents.
@@ -492,11 +492,11 @@ Pinned upstream input config:
 
 ```bash
 # passt (exact distro-built binary packages)
-PASST_VERSION=0.0~git20260728.f8df3f1-1
-PASST_UBUNTU_AMD64_SHA256=6dbd1d18e0f0ae5990e1b3d6369e04410c0934742ae144b7ce7b403138d2414a
-PASST_UBUNTU_ARM64_SHA256=41d239f7c5650388d8588de127e7324bc8ffcca8f2f85b08702dde9ca09995d3
-PASST_DEBIAN_AMD64_SHA256=141ccaa22e36c36a71221458f432fadc90d5f17c53f005ae7d84de963d5bd489
-PASST_DEBIAN_ARM64_SHA256=1121baf65be564bd3bc54dd121f27f609f8b61746567c17224fbba08401b0405
+PASST_VERSION=0.0~git20261002.cba3570-1
+PASST_UBUNTU_AMD64_SHA256=43c9e35c1ce3d50721859f0c8e8ffea2203644cc08feff2b89e2ecae5a8d852b
+PASST_UBUNTU_ARM64_SHA256=8017b2b8546815c27b1ca2f6d8df35dcb8b54ccb00b5678e98d9f978119e94a6
+PASST_DEBIAN_AMD64_SHA256=f3636cb53c0d7fb8c7306be51d0802f9d011c9dd28abc26656c0c33e4db48c05
+PASST_DEBIAN_ARM64_SHA256=44332f455df5591be3642a7290ced33c9389fbf8c63393b2a5fbe59f8e6cc196
 
 # Podman (Go)
 PODMAN_TAG=v6.2.0
@@ -514,9 +514,9 @@ AARDVARK_UPSTREAM_SHA256=daf871488603e659b0501224cf0731ac317809b1d1701fc061cb4f6
 AARDVARK_VENDOR_SHA256=6e6366828d4cd2ccf3cfe07657d8aba083045605696b4f74967c2c8340f51500
 
 # crun (C OCI runtime) — built from the upstream release dist tarball
-CRUN_TAG=1.28
-CRUN_VERSION=1.28
-CRUN_ARCHIVE_SHA256=eb8fe73ffe44d868b14bb94fa6c295bd57e8bf023de43b61579da826c07cc406
+CRUN_TAG=1.31
+CRUN_VERSION=1.31
+CRUN_ARCHIVE_SHA256=17d04ba159fada1f1300a36b8afe869afb38bf1bbda28da052e83bb4bee20108
 
 # conmon (C container monitor) — built from the upstream tag archive
 CONMON_TAG=v2.2.1
@@ -537,8 +537,8 @@ CONTAINERS_STORAGE_ARCHIVE_SHA256=72e07d2a2b10d58e9d47746501c96c0b321362506baeed
 Notes:
 - All orchestrators source this file directly.
 - passt pins four exact binary URLs and hashes: Ubuntu `amd64`/`arm64` from the
-  Launchpad build of `0.0~git20260728.f8df3f1-1`, and Debian `amd64`/`arm64`
-  from the immutable `20260728T202839Z` snapshot. The fetcher verifies the
+  Launchpad build of `0.0~git20261002.cba3570-1`, and Debian `amd64`/`arm64`
+  from the immutable `20261003T083111Z` snapshot. The fetcher verifies the
   SHA-256 plus the package name, version, and architecture.
 - `PODMAN_TAG` / `NETAVARK_TAG` control upstream source tarball selection.
 - `UPSTREAM_SHA256` is required and must match the downloaded upstream Podman tarball before extraction.
@@ -563,7 +563,7 @@ Notes:
   - `AARDVARK_VENDOR_SHA256` matches the release vendored-deps tarball
     (`.../aardvark-dns/releases/download/v<VERSION>/aardvark-dns-v<VERSION>-vendor.tar.gz`).
   - aardvark-dns ships a single binary (no systemd units, no man page).
-- crun uses its bare version as the tag (no leading `v`, e.g. `1.28`) and
+- crun uses its bare version as the tag (no leading `v`, e.g. `1.31`) and
   `CRUN_TAG` must equal `CRUN_VERSION`. `CRUN_ARCHIVE_SHA256` matches the upstream
   release **dist tarball** (`.../crun/releases/download/<VERSION>/crun-<VERSION>.tar.gz`),
   which is self-contained (bundled libocispec + blake3, pre-generated `configure`),
@@ -672,19 +672,19 @@ Ubuntu 24.04 (`noble`):
 - Ubuntu noble currently provides `passt 0.0~git20240220.1e6f92b-1`, which is below that requirement.
 - For noble hosts that need this feature, install the `ubuntu` passt asset from
   the `extra` release (or `apt install passt` with the `extra` component). It is the exact pinned
-  [`0.0~git20260728.f8df3f1-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20260728.f8df3f1-1).
+  [`0.0~git20261002.cba3570-1` Launchpad binary](https://launchpad.net/ubuntu/+source/passt/0.0~git20261002.cba3570-1).
 
 Ubuntu 26.04 (`resolute`):
 - The distro's `passt 0.0~git20260120.386b5f5-1` already provides
   `--map-host-loopback`.
-- The `extra` component still replaces it with the July pin needed for Podman
-  6.1's Pesto forwarding syntax, described below.
+- The `extra` component still replaces it with the newer pin; Podman's Pesto
+  forwarding syntax, described below, needs at least the July 28 release.
 
 Debian 13 (`trixie`):
 - No workaround is required.
 - Debian trixie provides `passt 0.0~git20250503.587980c-2+deb13u1`, which satisfies the requirement above.
 - The `extra` release also provides the newer exact pinned
-  [`0.0~git20260728.f8df3f1-1` Debian sid binary](https://snapshot.debian.org/package/passt/0.0~git20260728.f8df3f1-1/)
+  [`0.0~git20261002.cba3570-1` Debian sid binary](https://snapshot.debian.org/package/passt/0.0~git20261002.cba3570-1/)
   from snapshot.debian.org.
 - Quick check:
 
@@ -758,10 +758,10 @@ Requirements:
   binary is not enough: [Podman 6.1 emits target-address forwarding
   rules](https://github.com/podman-container-tools/podman/blob/v6.1.0/vendor/go.podman.io/common/libnetwork/pasta/pesto_linux.go)
   added upstream in July, and its IPv6 path also needs the later local-mode fix.
-  The pinned binaries use the upstream
-  [July 28 tag](https://passt.top/passt/tag/?h=2026_07_28.f8df3f1), which contains
-  both changes; the former June pin and the supported suites' older distro
-  packages do not.
+  The upstream
+  [July 28 tag](https://passt.top/passt/tag/?h=2026_07_28.f8df3f1) is the first
+  to contain both changes, and the pinned October 2 binaries are newer; the
+  supported suites' older distro packages do not contain them.
 - The container must be on a rootless **bridge** network (a named network or a
   Quadlet `.network` unit referenced via `Network=`). Containers on the plain
   `pasta` default keep the startup-snapshot behavior described above.
@@ -774,8 +774,8 @@ rootless_port_forwarder = "pasta"
 
 This option is experimental in Podman 6.1.0 and its behavior may change.
 
-The July 28 pin is therefore the compatibility floor used by this repository,
-not just an optional newer passt. Before relying on the experimental IPv6 path,
+The July 28 release is therefore the compatibility floor for this repository's
+passt pin, not just an optional newer passt. Before relying on the experimental IPv6 path,
 smoke-test it on the target host: publish a port from a container on a rootless
 bridge network, rotate or remove the host's IPv6 address, and confirm inbound
 IPv6 still reaches the container.

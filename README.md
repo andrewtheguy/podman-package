@@ -121,7 +121,7 @@ The GitHub releases mirror the APT components, one release per component build:
 - [`extra` component releases](https://github.com/andrewtheguy/podman-package/releases?q=%22extra+component%22) (`extra-<YYYYMMDD>-<N>`) — passt, crun, and conmon: optional newer builds.
 - [All releases](https://github.com/andrewtheguy/podman-package/releases) — the combined chronological GitHub release history.
 
-For a complete Podman 6.1 installation without this APT repository, download
+For a complete Podman 6.2 installation without this APT repository, download
 the `.deb`s for your distro and architecture from the latest `main` release;
 add the `extra` release if you want the newer passt/crun/conmon.
 
@@ -153,11 +153,11 @@ from its upstream tag archive with the target distro's packaging, and
 containers-common is `Architecture: all` and needs no compilation (config files
 and man pages only).
 
-> **Why containers-storage matters:** Podman 6.1 embeds storage library
-> v1.64.0. Its configuration parser honors an explicitly set `graphroot` even
+> **Why containers-storage matters:** Podman 6.2 embeds storage library
+> v1.65.1. Its configuration parser honors an explicitly set `graphroot` even
 > for rootless users. The distros' older `containers-storage` packages ship a
 > `/usr/share/containers/storage.conf` with `graphroot` hardcoded to
-> `/var/lib/containers/storage`, so rootless Podman 6.1 hits a root-owned path →
+> `/var/lib/containers/storage`, so rootless Podman 6.2 hits a root-owned path →
 > *permission denied*. The v1.63.0 `storage.conf` built here leaves
 > `graphroot`/`runroot` commented out, so rootless Podman falls back to its
 > per-user default.
@@ -499,8 +499,8 @@ PASST_DEBIAN_AMD64_SHA256=141ccaa22e36c36a71221458f432fadc90d5f17c53f005ae7d84de
 PASST_DEBIAN_ARM64_SHA256=1121baf65be564bd3bc54dd121f27f609f8b61746567c17224fbba08401b0405
 
 # Podman (Go)
-PODMAN_TAG=v6.1.4
-UPSTREAM_SHA256=200fd9b4b6d820cae24fc99d8e290ec945512365cf3cda8283b3905c0c284ea8
+PODMAN_TAG=v6.2.0
+UPSTREAM_SHA256=cb182273c5c5e3ea079f8f88a9a30a574d247f80e0b9dd9c02df1d2e6f6f3705
 
 # netavark (Rust)
 NETAVARK_TAG=v2.0.0

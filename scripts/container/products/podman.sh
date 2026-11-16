@@ -143,6 +143,13 @@ podman_patch_debian_packaging() {
     done
   fi
 
+  # Upstream dropped commands.md and renamed commands-demo.md to demos.md; the
+  # distro docs list still globs the old names, and dh_installdocs fails on a
+  # glob that matches nothing.
+  local podman_docs="debian/podman.docs"
+  grep -qxF 'commands*.md' "${podman_docs}" || die "expected 'commands*.md' entry missing from ${podman_docs}"
+  sed -i 's/^commands\*\.md$/demos.md/' "${podman_docs}"
+
   local not_installed_file="debian/not-installed"
   touch "${not_installed_file}"
   for entry in \
